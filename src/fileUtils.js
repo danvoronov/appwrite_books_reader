@@ -21,7 +21,7 @@ function writeChapterOutput(fileName, index, chapterName, json) {
   
   writeFileSync(
     path.join(bookDir, `ans_${index}.txt`),
-    `## ${chapterName}\n\t${json.chapter_summary}\n\n${cardsText}`
+    `## ${chapterName}\n\t${json.chapter_summary}\n\n${cardsText}\n\n`
   );
 }
 

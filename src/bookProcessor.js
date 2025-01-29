@@ -5,9 +5,9 @@ async function processChapter(book, fileName, index) {
   if (index > 0 && index <= book.chapters.length) {
     try {
       const chapter = book.chapters[index - 1];
-      const generatedText = await run(chapter.content);
+      const generatedJSON = await run(chapter.content);
       
-      writeChapterOutput(fileName, index, chapter.name, generatedText);
+      writeChapterOutput(fileName, index, chapter.name, generatedJSON);
       
       // Wait between chapters to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 4000));

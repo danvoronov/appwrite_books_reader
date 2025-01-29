@@ -6,10 +6,10 @@ function ensureOutputDirectory(outputDir = './output') {
   }
 }
 
-function writeChapterOutput(fileName, index, chapterName, content) {
+function writeChapterOutput(fileName, index, chapterName, json) {
   writeFileSync(
     `./output/${fileName}_ans_${index}.txt`,
-    `## ${chapterName}\n\n${content}`
+    `## ${chapterName}\n\n${JSON.stringify(json)}`
   );
 }
 

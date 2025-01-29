@@ -56,7 +56,7 @@ async function run(text) {
     }
 
     console.log({fullResponse})
-    return fullResponse
+    return {summary: '', cards: []}
 
   } catch (error) {
     console.error('Error in run function:', error);

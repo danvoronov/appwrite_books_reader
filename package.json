@@ -1,0 +1,13 @@
+{
+	"name": "rem_by_gemini",
+	"version": "1.0.0",
+	"main": "main.js",
+	"scripts": {
+	  "start": "node --env-file=.env main.js"
+	},
+	"dependencies": {
+		"@google/generative-ai": "^0.21.0",
+		"epub2": "^3.0.2",
+		"turndown": "^7.2.0"
+	}
+}

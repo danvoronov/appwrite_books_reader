@@ -4,6 +4,10 @@ function formatChapterInfo(chapters, bookChapters, minContentLength) {
   let columns = Array(COLUMNS).fill().map(() => []);
   
   // Distribute chapters into columns
+  let visibleChapterCount = 0;
+  const displayToRealMap = new Map();
+  const realToDisplayMap = new Map();
+  
   chapters.forEach((num, index) => {
     const columnIndex = Math.floor(index / rows);
     if (columnIndex < COLUMNS) {
@@ -11,7 +15,10 @@ function formatChapterInfo(chapters, bookChapters, minContentLength) {
       const chapterName = chapter.name.slice(0, 30) + (chapter.name.length > 30 ? '...' : '');
       const contentLength = chapter.content.length;
       if (contentLength >= minContentLength) {
-        columns[columnIndex].push(`[${num.toString().padStart(2)}] ${chapterName} (${contentLength})`);
+        visibleChapterCount++;
+        displayToRealMap.set(visibleChapterCount, num);
+        realToDisplayMap.set(num, visibleChapterCount);
+        columns[columnIndex].push(`[${visibleChapterCount.toString().padStart(2)}] ${chapterName} (${contentLength})`);
       }
     }
   });
@@ -30,7 +37,11 @@ function formatChapterInfo(chapters, bookChapters, minContentLength) {
     }
   }
   
-  return result;
+  return {
+    formattedText: result,
+    displayToRealMap,
+    realToDisplayMap
+  };
 }
 
 function getValidChapterNumbers(chapters, minContentLength = 500) {
@@ -44,7 +55,17 @@ function getValidChapterNumbers(chapters, minContentLength = 500) {
     .map(chapter => chapter.index);
 }
 
+function mapDisplayNumberToReal(displayNumber, displayToRealMap) {
+  return displayToRealMap.get(displayNumber);
+}
+
+function mapRealNumberToDisplay(realNumber, realToDisplayMap) {
+  return realToDisplayMap.get(realNumber);
+}
+
 module.exports = {
   formatChapterInfo,
-  getValidChapterNumbers
+  getValidChapterNumbers,
+  mapDisplayNumberToReal,
+  mapRealNumberToDisplay
 }; 

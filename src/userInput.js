@@ -1,6 +1,6 @@
 const readline = require('readline');
 
-async function getChapterSelection(chaptersDisplay, chapterNumbers, allOption = '0') {
+async function getChapterSelection(chaptersDisplay, chapterNumbers, displayToRealMap, allOption = '0') {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -16,12 +16,14 @@ async function getChapterSelection(chaptersDisplay, chapterNumbers, allOption = 
         if (trimmedAnswer === allOption) {
           resolve(allOption);
         } else {
-          const num = parseInt(trimmedAnswer, 10);
-          if (isNaN(num) || !chapterNumbers.includes(num)) {
+          const displayNum = parseInt(trimmedAnswer, 10);
+          const realNum = displayToRealMap.get(displayNum);
+          
+          if (isNaN(displayNum) || !realNum || !chapterNumbers.includes(realNum)) {
             console.log('Некорректный ввод. Используем первую доступную главу.');
-            resolve(chapterNumbers[0].toString());
+            resolve(displayToRealMap.get(1).toString());
           } else {
-            resolve(trimmedAnswer);
+            resolve(realNum.toString());
           }
         }
       }
@@ -29,8 +31,13 @@ async function getChapterSelection(chaptersDisplay, chapterNumbers, allOption = 
   });
 }
 
-function getChaptersToProcess(selectedChapters, chapterNumbers, allOption = '0') {
-  return selectedChapters === allOption ? chapterNumbers : [parseInt(selectedChapters, 10)];
+function getChaptersToProcess(selectedChapters, chapterNumbers, displayToRealMap, allOption = '0') {
+  if (selectedChapters === allOption) {
+    return chapterNumbers;
+  }
+  
+  const realChapterNum = parseInt(selectedChapters, 10);
+  return [realChapterNum];
 }
 
 module.exports = {

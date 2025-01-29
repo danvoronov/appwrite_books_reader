@@ -16,53 +16,68 @@ const generationConfig = {
 
 
 async function run(text) {
+  const maxRetries = 2;
+  const emptyResponse = { chapter_summary: '', chapter_cards: [] };
 
-  try {
-
-    const chatSession = generator.startChat({
-      generationConfig,
-      history: [{role: "user", parts: [{text}]}]
-    });
-
-    console.log(`запрос послали на модель ${model}`)
-    
-    const result = await chatSession.sendMessageStream('');
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Sending request to model ${model} (attempt ${attempt}/${maxRetries})`);
       
-    let fullResponse = '';
-    let characterCount = 0;
-    let firstChunkReceived = false;
-
-    for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
-      fullResponse += chunkText;
-      characterCount += chunkText.length;
+      const chatSession = generator.startChat({
+        generationConfig,
+        history: [{ role: "user", parts: [{ text }] }]
+      });
       
-      // if (!firstChunkReceived && chunkText.length > 0) {
-      //   firstChunkReceived = true;
-      //   if (!fullResponse.trim().startsWith('```json')) {
-      //     console.log('Первая строка не содержит ```json - пробуем снова', fullResponse);
-      //     break;
-      //   }
-      // }
+      const result = await chatSession.sendMessageStream('');
       
-      process.stdout.write(`\rПолучено символов: ${characterCount}`);
-    }    
+      let fullResponse = '';
+      let characterCount = 0;
+      let firstLine = '';
+      let isFirstLineComplete = false;
 
-    if (fullResponse.trim().startsWith('```json')) {
-      const lines = fullResponse.split('\n');
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        
+        // Check first line as soon as we have a complete line
+        if (!isFirstLineComplete) {
+          firstLine += chunkText;
+          if (firstLine.includes('\n')) {
+            isFirstLineComplete = true;
+            if (!firstLine.trim().startsWith('```json')) {
+              console.log(`\nFirst line is not JSON format on attempt ${attempt}`);
+              // Break the stream early - no need to continue reading
+              break;
+            }
+          }
+        }
+
+        fullResponse += chunkText;
+        characterCount += chunkText.length;
+        process.stdout.write(`\rReceived characters: ${characterCount}`);
+      }
+
+      // If we broke early due to invalid first line
+      if (!firstLine.trim().startsWith('```json')) {
+        if (attempt === maxRetries) {
+          console.log('All attempts exhausted - failed to get valid JSON response');
+          return emptyResponse;
+        }
+        continue;
+      }
+
+      // Parse JSON from the response
+      const lines = fullResponse.trim().split('\n');
       const jsonLines = lines.slice(1, -1).join('\n');
-      console.log('jsonLines', jsonLines);
       return JSON.parse(jsonLines);
+
+    } catch (error) {
+      console.error(`Error on attempt ${attempt}:`, error);
+      if (attempt === maxRetries) {
+        console.log('All attempts exhausted - returning empty response');
+        return emptyResponse;
+      }
     }
-
-    console.log({fullResponse})
-    return {summary: '', cards: []}
-
-  } catch (error) {
-    console.error('Error in run function:', error);
   }
 
-}
-
-// экспортируй ран
-module.exports = { run };
+  return emptyResponse;
+} 

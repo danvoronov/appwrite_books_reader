@@ -1,0 +1,13 @@
+https://www.npmjs.com/package/epub2 
+
+Available fields:
+
+    creator Author of the book (if multiple authors, then the first on the list) (Lewis Carroll)
+    creatorFileAs Author name on file (Carroll, Lewis)
+    title Title of the book (Alice's Adventures in Wonderland)
+    language Language code (en or en-us etc.)
+    subject To  pic of the book (Fantasy)
+    date creation of the file (2006-08-12)
+    description
+
+flow is a property of the epub object and holds the actual list of chapters (TOC is just an indication and can link to a # url inside a chapter file)

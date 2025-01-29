@@ -7,9 +7,11 @@ function ensureOutputDirectory(outputDir = './output') {
 }
 
 function writeChapterOutput(fileName, index, chapterName, json) {
+  const cardsText = json.chapter_cards.map(card => `\t###${card.topic}\n\t\t${card.cards.join('\n\t\t')}`).join('\n\n');
+  
   writeFileSync(
     `./output/${fileName}_ans_${index}.txt`,
-    `## ${chapterName}\n\n${JSON.stringify(json)}`
+    `## ${chapterName}\n\t${json.chapter_summary}\n${cardsText}`
   );
 }
 

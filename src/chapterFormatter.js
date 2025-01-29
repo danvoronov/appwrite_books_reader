@@ -11,7 +11,7 @@ function formatChapterInfo(chapters, bookChapters, minContentLength) {
       const chapterName = chapter.name.slice(0, 30) + (chapter.name.length > 30 ? '...' : '');
       const contentLength = chapter.content.length;
       if (contentLength >= minContentLength) {
-        columns[columnIndex].push(`${num.toString().padStart(2)}: ${chapterName} (${contentLength})`);
+        columns[columnIndex].push(`[${num.toString().padStart(2)}] ${chapterName} (${contentLength})`);
       }
     }
   });

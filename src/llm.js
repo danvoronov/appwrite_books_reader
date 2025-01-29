@@ -81,3 +81,5 @@ async function run(text) {
 
   return emptyResponse;
 } 
+
+module.exports = { run };

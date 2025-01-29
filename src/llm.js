@@ -1,74 +1,68 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require('fs');
-const path = require('path');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = "gemini-2.0-flash-thinking-exp-01-21" // "gemini-exp-1206"
 
-const systemInstruction = fs.readFileSync(path.join(__dirname, '../data/systemInstruction.txt'), 'utf8');
+const systemInstruction = fs.readFileSync("./data/systemInstruction.txt", 'utf8');
+const generator = genAI.getGenerativeModel({model, systemInstruction});
 
-const generator = genAI.getGenerativeModel({ 
-  model,
-  generationConfig: {
-    temperature: 0.3,
-    topP: 0.95
-  }
-});
+const generationConfig = {
+  temperature: 0.3,
+  topP: 0.95
+};
 
-async function run(text, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`Попытка ${attempt}/${maxRetries} на модели ${model}`);
-      
-      const chat = generator.startChat( {
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: systemInstruction }]
-          }
-        ]
-      });
-      const result = await chat.sendMessageStream(text);
-      
-      let fullResponse = '';
-      let characterCount = 0;
-      let firstChunkReceived = false;
 
-      for await (const chunk of result.stream) {
-        const chunkText = chunk.text();
-        fullResponse += chunkText;
-        characterCount += chunkText.length;
-        
-        if (!firstChunkReceived && chunkText.length > 0) {
-          firstChunkReceived = true;
-          if (!fullResponse.trim().startsWith('```json')) {
-            console.log('Первая строка не содержит ```json - пробуем снова', fullResponse);
-            break;
-          }
-        }
-        
-        process.stdout.write(`\rПолучено символов: ${characterCount}`);
-      }
+async function run(text) {
+
+  try {
+
+    const chatSession = generator.startChat({
+      generationConfig,
+      history: [{role: "user", parts: [{text}]}]
+    });
+
+    console.log(`запрос послали на модель ${model}`)
+    
+    const result = await chatSession.sendMessageStream('');
       
-      if (fullResponse.trim().startsWith('```json')) {
-        const lines = fullResponse.split('\n');
-        const jsonLines = lines.slice(1, -1).join('\n');
-        console.log(jsonLines);
-        return JSON.parse(jsonLines);
-      }
+    let fullResponse = '';
+    let characterCount = 0;
+    let firstChunkReceived = false;
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      fullResponse += chunkText;
+      characterCount += chunkText.length;
       
-      if (attempt === maxRetries) {
-        throw new Error('Превышено максимальное количество попыток получить JSON ответ');
-      }
+      // if (!firstChunkReceived && chunkText.length > 0) {
+      //   firstChunkReceived = true;
+      //   if (!fullResponse.trim().startsWith('```json')) {
+      //     console.log('Первая строка не содержит ```json - пробуем снова', fullResponse);
+      //     break;
+      //   }
+      // }
       
-    } catch (error) {
-      if (attempt === maxRetries) {
-        console.error('Error in run function:', error);
-        throw error;
-      }
+      process.stdout.write(`\rПолучено символов: ${characterCount}`);
+    }    
+
+    if (fullResponse.trim().startsWith('```json')) {
+      const lines = fullResponse.split('\n');
+      const jsonLines = lines.slice(1, -1).join('\n');
+      console.log('jsonLines', jsonLines);
+      return JSON.parse(jsonLines);
     }
+
+    console.log({fullResponse})
+    return fullResponse
+
+  } catch (error) {
+    console.error('Error in run function:', error);
   }
+
 }
 
+// экспортируй ран
 module.exports = { run };

@@ -3,6 +3,16 @@ const { ensureOutputDirectory, writeBookTitle } = require('./src/fileUtils');
 const { formatChapterInfo, getValidChapterNumbers, mapDisplayNumberToReal } = require('./src/chapterFormatter');
 const { getChapterSelection, getChaptersToProcess } = require('./src/userInput');
 const { processChapters } = require('./src/bookProcessor');
+const yargs = require('yargs/yargs');
+const { hideBin } = require('yargs/helpers');
+
+const argv = yargs(hideBin(process.argv))
+  .option('n', {
+    alias: 'number',
+    describe: 'Chapter number to process',
+    type: 'number'
+  })
+  .argv;
 
 const fileName = '4000weeks';
 
@@ -16,8 +26,19 @@ const fileName = '4000weeks';
     const chapterNumbers = getValidChapterNumbers(book.chapters);
     const formattedInfo = formatChapterInfo(chapterNumbers, book.chapters, 500);
     
-    const selectedChapters = await getChapterSelection(formattedInfo.formattedText, chapterNumbers, formattedInfo.displayToRealMap);
-    const chaptersToGenerate = getChaptersToProcess(selectedChapters, chapterNumbers, formattedInfo.displayToRealMap);
+    let chaptersToGenerate;
+    if (argv.n !== undefined) {
+      // If chapter number is provided via command line
+      const realChapterNumber = formattedInfo.displayToRealMap[argv.n];
+      if (!realChapterNumber) {
+        throw new Error(`Invalid chapter number: ${argv.n}`);
+      }
+      chaptersToGenerate = [realChapterNumber];
+    } else {
+      // Interactive selection if no chapter number provided
+      const selectedChapters = await getChapterSelection(formattedInfo.formattedText, chapterNumbers, formattedInfo.displayToRealMap);
+      chaptersToGenerate = getChaptersToProcess(selectedChapters, chapterNumbers, formattedInfo.displayToRealMap);
+    }
     
     await processChapters(book, fileName, chaptersToGenerate);
     

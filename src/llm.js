@@ -1,6 +1,10 @@
 const fs = require('fs');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+// Helper function for delay
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+// Fibonacci delays in seconds
+const retryDelays = [1, 1, 2, 3, 5];
 
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
@@ -16,11 +20,18 @@ const generationConfig = {
 
 
 async function run(text) {
-  const maxRetries = 2;
+  const maxRetries = 4;
   const emptyResponse = { chapter_summary: '', chapter_cards: [] };
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Add delay before retries (skip first attempt)
+      if (attempt > 1) {
+        const delaySeconds = retryDelays[attempt - 2];
+        console.log(`Waiting ${delaySeconds} seconds before attempt ${attempt}...`);
+        await delay(delaySeconds * 1000);
+      }
+
       console.log(`Sending request to model ${model} (attempt ${attempt}/${maxRetries})`);
       
       const chatSession = generator.startChat({

@@ -6,12 +6,22 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Fibonacci delays in seconds
 const retryDelays = [1, 1, 2, 3, 5];
 
+// Helper function to format character count
+function formatCharCount(count) {
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  return count.toString();
+}
+
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = "gemini-2.0-flash-thinking-exp-01-21" // "gemini-exp-1206"
+const secondModel = "gemini-exp-1206";
 
 const systemInstruction = fs.readFileSync("./data/systemInstruction.txt", 'utf8');
-const generator = genAI.getGenerativeModel({model, systemInstruction});
+const primaryGenerator = genAI.getGenerativeModel({model, systemInstruction});
+const backupGenerator = genAI.getGenerativeModel({model: secondModel, systemInstruction});
 
 const generationConfig = {
   temperature: 0.3,
@@ -25,16 +35,20 @@ async function run(text) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Choose generator based on attempt number
+      const currentGenerator = attempt <= 2 ? primaryGenerator : backupGenerator;
+      const currentModel = attempt <= 2 ? model : secondModel;
+
       // Add delay before retries (skip first attempt)
       if (attempt > 1) {
         const delaySeconds = retryDelays[attempt - 2];
-        console.log(`Waiting ${delaySeconds} seconds before attempt ${attempt}...`);
-        await delay(delaySeconds * 1000);
+        console.log(`Waiting ${delaySeconds*2} seconds before attempt ${attempt}...`);
+        await delay(delaySeconds * 1000*2);
       }
 
-      console.log(`Sending request to model ${model} (attempt ${attempt}/${maxRetries})`);
-      
-      const chatSession = generator.startChat({
+      console.log(`Sending request to model ${currentModel} (attempt ${attempt}/${maxRetries})`);
+
+      const chatSession = currentGenerator.startChat({
         generationConfig,
         history: [{ role: "user", parts: [{ text }] }]
       });
@@ -64,7 +78,7 @@ async function run(text) {
 
         fullResponse += chunkText;
         characterCount += chunkText.length;
-        process.stdout.write(`\rReceived characters: ${characterCount}`);
+        process.stdout.write(`\rReceived characters: ${formatCharCount(characterCount)}`);
       }
 
       // If we broke early due to invalid first line

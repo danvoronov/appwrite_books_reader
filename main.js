@@ -29,10 +29,13 @@ const fileName = '4000weeks';
     let chaptersToGenerate;
     if (argv.n !== undefined) {
       // If chapter number is provided via command line
-      const realChapterNumber = formattedInfo.displayToRealMap[argv.n];
-      if (!realChapterNumber) {
-        throw new Error(`Invalid chapter number: ${argv.n}`);
+      console.log('Available display numbers:', Array.from(formattedInfo.displayToRealMap.keys()));
+      
+      if (!formattedInfo.displayToRealMap.has(argv.n)) {
+        throw new Error(`Invalid chapter number: ${argv.n}. Available numbers: ${Array.from(formattedInfo.displayToRealMap.keys()).join(', ')}`);
       }
+      
+      const realChapterNumber = formattedInfo.displayToRealMap.get(argv.n);
       chaptersToGenerate = [realChapterNumber];
     } else {
       // Interactive selection if no chapter number provided

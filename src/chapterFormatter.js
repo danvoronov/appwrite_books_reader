@@ -1,3 +1,11 @@
+// Helper function to format character count
+function formatCharCount(count) {
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  return count.toString();
+}
+
 function formatChapterInfo(chapters, bookChapters, minContentLength) {
   const COLUMNS = 3;
   const rows = Math.ceil(chapters.length / COLUMNS);
@@ -18,7 +26,7 @@ function formatChapterInfo(chapters, bookChapters, minContentLength) {
         visibleChapterCount++;
         displayToRealMap.set(visibleChapterCount, num);
         realToDisplayMap.set(num, visibleChapterCount);
-        columns[columnIndex].push(`[${visibleChapterCount.toString().padStart(2)}] ${chapterName} (${contentLength})`);
+        columns[columnIndex].push(`[${visibleChapterCount.toString().padStart(2)}] ${chapterName} — ${formatCharCount(contentLength)}`);
       }
     }
   });

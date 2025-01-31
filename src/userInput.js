@@ -8,7 +8,7 @@ async function getChapterSelection(chaptersDisplay, chapterNumbers, displayToRea
 
   return new Promise((resolve) => {
     rl.question(
-      `\nВКакую главу сгенерировать?\n${chaptersDisplay}\nВведите номер главы или ${allOption} для всех и 666 для выхода: `,
+      `\nВКакую главу сгенерировать?\n${chaptersDisplay}\nВведите номер главы или ${allOption} для всех: `,
       (answer) => {
         rl.close();
         const trimmedAnswer = answer.trim().toLowerCase();

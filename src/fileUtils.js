@@ -16,7 +16,7 @@ function ensureBookDirectory(fileName) {
   return bookDir;
 }
 
-function writeChapterOutput(fileName, index, chapterName, json) {
+function writeChapterOutput(dirName, index, chapterName, json) {
   if (!json || !json.chapter_cards || !json.chapter_cards.length) {
     console.log(`${chapterName} -- пустые данные. Не пишем`)
     return
@@ -26,16 +26,16 @@ function writeChapterOutput(fileName, index, chapterName, json) {
   const content = `## ${chapterName}\n\t${json.chapter_summary}\n\n${cardsText}\n\n`
 
   // превратим chapterName в название файла для виндовс убрал пробелы и спецсимволы
-  const fileName = chapterName.replace(/[^a-zA-Z0-9]/g, '_')+'.txt';
+  const fileToWrite = chapterName.replace(/[^a-zA-Z0-9]/g, '_')+'.txt';
 
-  const bookDir = ensureBookDirectory(fileName);
-  const filePath = path.join(bookDir, fileName);
+  const bookDir = ensureBookDirectory(dirName);
+  const filePath = path.join(bookDir, fileToWrite);
   if (existsSync(filePath)) {
-    writeFileSync(path.join(bookDir, '_'+fileName), content);
-    console.log(`Дубликат ${fileName} -- записан`)
+    writeFileSync(path.join(bookDir, '_'+fileToWrite), content);
+    console.log(`Дубликат ${fileToWrite} -- записан`)
   } else {
     writeFileSync(filePath, content);
-    console.log(`${fileName} -- записан`)
+    console.log(`${fileToWrite} -- записан`)
   }
   console.log(`\n\n`)
 }

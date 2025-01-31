@@ -8,6 +8,7 @@ function ensureOutputDirectory(outputDir = './output') {
 }
 
 function ensureBookDirectory(fileName) {
+  ensureOutputDirectory()
   const bookDir = path.join('./output', fileName);
   if (!existsSync(bookDir)) {
     mkdirSync(bookDir);
@@ -16,13 +17,21 @@ function ensureBookDirectory(fileName) {
 }
 
 function writeChapterOutput(fileName, index, chapterName, json) {
-  const bookDir = ensureBookDirectory(fileName);
-  const cardsText = json.chapter_cards.map(card => `\t### ${card.topic}\n\t\t${card.cards.join('\n\t\t')}`).join('\n\n');
+  if (!json || !json.chapter_cards || !json.chapter_cards.length) {
+    console.log(`${chapterName} -- пустые данные. Не пишем`)
+    return
+  }
   
-  writeFileSync(
-    path.join(bookDir, `ans_${index}.txt`),
-    `## ${chapterName}\n\t${json.chapter_summary}\n\n${cardsText}\n\n`
-  );
+  const cardsText = json.chapter_cards.map(card => `\t### ${card.topic}\n\t\t${card.cards.join('\n\t\t')}`).join('\n\n');
+  const content = `## ${chapterName}\n\t${json.chapter_summary}\n\n${cardsText}\n\n`
+
+  const bookDir = ensureBookDirectory(fileName);
+  const filePath = path.join(bookDir, `ans_${index}.txt`);
+  if (existsSync(filePath)) {
+    writeFileSync(path.join(bookDir, `ans_${index}_2.txt`), content);
+  } else {
+    writeFileSync(filePath, content);
+  }
 }
 
 function writeBookTitle(fileName, title) {

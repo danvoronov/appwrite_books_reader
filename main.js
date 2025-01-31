@@ -37,13 +37,22 @@ const fileName = '4000weeks';
       
       const realChapterNumber = formattedInfo.displayToRealMap.get(argv.n);
       chaptersToGenerate = [realChapterNumber];
+
+      await processChapters(book, fileName, chaptersToGenerate);
     } else {
-      // Interactive selection if no chapter number provided
-      const selectedChapters = await getChapterSelection(formattedInfo.formattedText, chapterNumbers, formattedInfo.displayToRealMap);
-      chaptersToGenerate = getChaptersToProcess(selectedChapters, chapterNumbers, formattedInfo.displayToRealMap);
+      // повторять этот цикл, пока не будет введено 666
+      while (true) {  
+        const selectedChapters = await getChapterSelection(formattedInfo.formattedText, chapterNumbers, formattedInfo.displayToRealMap);
+        chaptersToGenerate = getChaptersToProcess(selectedChapters, chapterNumbers, formattedInfo.displayToRealMap);
+        await processChapters(book, fileName, chaptersToGenerate);
+        if (chaptersToGenerate === '666') {
+          break;
+        }
+      }
+      
     }
     
-    await processChapters(book, fileName, chaptersToGenerate);
+
     
   } catch (error) {
     console.error('Произошла ошибка:', error);

@@ -32,12 +32,11 @@ function writeChapterOutput(dirName, index, chapterName, json) {
   const filePath = path.join(bookDir, fileToWrite);
   if (existsSync(filePath)) {
     writeFileSync(path.join(bookDir, '_'+fileToWrite), content);
-    console.log(`Дубликат ${fileToWrite} -- записан`)
+    console.log(`\nДубликат ${fileToWrite} -- записан`)
   } else {
     writeFileSync(filePath, content);
-    console.log(`${fileToWrite} -- записан`)
+    console.log(`\n${fileToWrite} -- записан`)
   }
-  console.log(`\n\n`)
 }
 
 function writeBookTitle(fileName, title) {

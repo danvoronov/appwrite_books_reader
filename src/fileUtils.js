@@ -25,13 +25,19 @@ function writeChapterOutput(fileName, index, chapterName, json) {
   const cardsText = json.chapter_cards.map(card => `\t### ${card.topic}\n\t\t${card.cards.join('\n\t\t')}`).join('\n\n');
   const content = `## ${chapterName}\n\t${json.chapter_summary}\n\n${cardsText}\n\n`
 
+  // превратим chapterName в название файла для виндовс убрал пробелы и спецсимволы
+  const fileName = chapterName.replace(/[^a-zA-Z0-9]/g, '_')+'.txt';
+
   const bookDir = ensureBookDirectory(fileName);
-  const filePath = path.join(bookDir, `ans_${index}.txt`);
+  const filePath = path.join(bookDir, fileName);
   if (existsSync(filePath)) {
-    writeFileSync(path.join(bookDir, `ans_${index}_2.txt`), content);
+    writeFileSync(path.join(bookDir, '_'+fileName), content);
+    console.log(`Дубликат ${fileName} -- записан`)
   } else {
     writeFileSync(filePath, content);
+    console.log(`${fileName} -- записан`)
   }
+  console.log(`\n\n`)
 }
 
 function writeBookTitle(fileName, title) {

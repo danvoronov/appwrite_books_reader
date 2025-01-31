@@ -20,13 +20,13 @@ function formatChapterInfo(chapters, bookChapters, minContentLength) {
     const columnIndex = Math.floor(index / rows);
     if (columnIndex < COLUMNS) {
       const chapter = bookChapters[num-1];
-      const chapterName = chapter.name.slice(0, 30) + (chapter.name.length > 30 ? '...' : '');
+      const chapterName = chapter.name.slice(0, 40) + (chapter.name.length > 40 ? '...' : '');
       const contentLength = chapter.content.length;
       if (contentLength >= minContentLength) {
         visibleChapterCount++;
         displayToRealMap.set(visibleChapterCount, num);
         realToDisplayMap.set(num, visibleChapterCount);
-        columns[columnIndex].push(`[${visibleChapterCount.toString().padStart(2)}] ${chapterName} — ${formatCharCount(contentLength)}`);
+        columns[columnIndex].push(`[${visibleChapterCount.toString().padStart(2)}] ${formatCharCount(contentLength)} — ${chapterName}`);
       }
     }
   });

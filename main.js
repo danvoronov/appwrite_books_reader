@@ -14,7 +14,7 @@ const argv = yargs(hideBin(process.argv))
   })
   .argv;
 
-const fileName = '4000weeks';
+const fileName = 'thesignalandthenoise';
 
 (async () => {
   try {

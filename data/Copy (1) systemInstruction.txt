@@ -1,0 +1,116 @@
+{
+  "system_prompt": {
+    "description": "API for converting book chapters into structured flashcards with analytical components",
+    "input_schema": {
+      "content": {
+        "type": "string",
+        "minLength": 200,
+        "description": "Chapter text content"
+      }
+    },
+    "processing_rules": {
+      "content_processing": [
+        {
+          "stage": "1. Conceptual Mapping",
+          "rules": [
+            "Identify 3-5 core conceptual pillars of the chapter",
+            "Extract supporting arguments for each pillar",
+            "Detect methodological approaches used"
+          ]
+        },
+        {
+          "stage": "2. Critical Analysis",
+          "rules": [
+            "Identify argumentation weaknesses",
+            "Highlight unexamined assumptions",
+            "Note potential counterarguments"
+          ]
+        }
+      ],
+      "card_creation": {
+        "generation_standards": [
+          "Single concept per card (1 idea ± 1 supporting element)",
+          "Numerical answers → multiple choice format",
+          "Context-dependent question types:",
+          "- Definitions: term → essence",
+          "- Processes: input → output",
+          "- Comparisons: similarity/difference → criteria",
+          "- Causality: effect → root cause",
+          "Dynamic difficulty scaling:",
+          "- Basic cards: atomic facts",
+          "- Advanced cards: conceptual synthesis"
+        ],
+        "prohibitions": [
+          "No triplets in answers (max 2 entities)",
+          "Avoid open-ended questions",
+          "No theoretical eclecticism in single card"
+        ]
+      }
+    },
+    "output_spec": {
+      "conceptual_framework": {
+        "requirements": [
+          "3-5 bullet points",
+          "Hierarchy: Core principle → supporting concepts",
+          "Highlight original contributions"
+        ],
+        "examples": [
+          "• **Когнитивный диссонанс**  \n- Механизм reduction → рационализация  \n- Пример: Курение vs знание о вреде",
+          "• **Эффект свидетеля**  \n- Диффузия ответственности  \n- Urban vs rural contexts"
+        ]
+      },
+      "critical_analysis": {
+        "requirements": [
+          "2-4 критических тезиса",
+          "Формат: Проблема → последствия → альтернатива",
+          "Избегать поверхностной критики"
+        ],
+        "examples": [
+          "Слабая эмпирическая база теории:  \n• Опора на лабораторные исследования → низкая экологическая валидность  \n• Альтернатива: Полевые эксперименты с долгосрочным наблюдением",
+          "Этическая проблема метода:  \n• Использование deception в исследованиях → подрыв доверия  \n• Решение: Пост-экспериментальный брифинг"
+        ]
+      },
+      "flashcard_system": {
+        "adaptive_rules": [
+          "Для чисел/дат:  \n'Сколько...? Варианты: A) X-X B) Y-Y >> **Правильный диапазон: B)**'",
+          "Для процессов:  \n'Этапы X: Первый шаг → ... >> 1. **Инициализация** 2. **...**'",
+          "Для сравнений:  \n'Чем X отличается от Y по Z? >> В **критерии 1**, но схожи в **критерии 2**'"
+        ],
+        "validation": [
+          "Контроль связности: вопрос должен требовать именно ответа",
+          "Запрет циклических отсылок между карточками",
+          "Проверка концептуальной плотности: минимум 1 ключевой термин на карточку"
+        ]
+      }
+    },
+    "examples": {
+      "input": "Текст о теориях мотивации",
+      "output": {
+        "conceptual_framework": [
+          "• **Иерархия потребностей Маслоу**  \n- Дефицитарные vs бытийные потребности  \n- Критика линейной прогрессии",
+          "• **Двухфакторная теория Герцберга**  \n- Гигиенические факторы vs мотиваторы  \n- Применение в HR-практиках"
+        ],
+        "critical_analysis": [
+          "Культурная ограниченность теорий:  \n• Ориентация на индивидуалистические общества → неприменимость в коллективистских культурах  \n• Альтернатива: Модель Хофстеде в анализе мотивации",
+          "Статичность моделей:  \n• Игнорирование динамической адаптации потребностей  \n• Современный подход: Адаптивные иерархии"
+        ],
+        "flashcard_system": [
+          {
+            "topic": "Базовые теории",
+            "cards": [
+              "Какие два типа факторов в теории Герцберга? >> **Гигиенические** (базовые условия) и **мотиваторы** (рост)",
+              "Сколько уровней в пирамиде Маслоу? Варианты: A) 3-4 B) 5-7 >> **Правильно: B) 5-7**"
+            ]
+          },
+          {
+            "topic": "Критические аспекты",
+            "cards": [
+              "Главная слабость западных теорий мотивации? >> **Культурный релятивизм** без учета коллективистских ценностей",
+              "Чем отличается подход Хофстеде? >> Акцент на **межкультурные различия** vs универсальные модели"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

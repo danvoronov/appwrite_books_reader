@@ -1,5 +1,5 @@
 const { getEpubMetadata } = require('./src/openEpub');
-const { ensureOutputDirectory, writeBookTitle } = require('./src/fileUtils');
+const { ensureOutputDirectory, writeBookTitle, createCombinedCardsFile } = require('./src/fileUtils');
 const { formatChapterInfo, getValidChapterNumbers, mapDisplayNumberToReal } = require('./src/chapterFormatter');
 const { getChapterSelection, getChaptersToProcess } = require('./src/userInput');
 const { processChapters } = require('./src/bookProcessor');
@@ -24,7 +24,7 @@ const fileName = 'thesignalandthenoise';
     writeBookTitle(fileName, book.title);
 
     const chapterNumbers = getValidChapterNumbers(book.chapters);
-    const formattedInfo = formatChapterInfo(chapterNumbers, book.chapters, 500);
+    const formattedInfo = formatChapterInfo(chapterNumbers, book.chapters, 500, fileName);
     
     let chaptersToGenerate;
     if (argv.n !== undefined) {
@@ -39,13 +39,14 @@ const fileName = 'thesignalandthenoise';
       chaptersToGenerate = [realChapterNumber];
 
       await processChapters(book, fileName, chaptersToGenerate);
+      createCombinedCardsFile(fileName);
     } else {
       while (true) {  
-        const selectedChapters = await getChapterSelection(formattedInfo.formattedText, chapterNumbers, formattedInfo.displayToRealMap);
+        const selectedChapters = await getChapterSelection(formattedInfo.formattedText, chapterNumbers, formattedInfo.displayToRealMap, '0', fileName, book.chapters);
         chaptersToGenerate = getChaptersToProcess(selectedChapters, chapterNumbers, formattedInfo.displayToRealMap);
         await processChapters(book, fileName, chaptersToGenerate);
+        createCombinedCardsFile(fileName);
       }
-      
     }
     
 

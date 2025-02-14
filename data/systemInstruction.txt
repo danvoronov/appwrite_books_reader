@@ -36,6 +36,7 @@
         "structural_rules": [
           "Format: 'Question >> Answer' in Russian",
           "Max length: 650 characters per card",
+          "Min length: 450 characters per card",
           "Answer requirements:",
           "- **Bold** key terms",
           "- No markdown/special symbols",

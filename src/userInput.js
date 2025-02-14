@@ -1,34 +1,67 @@
 const readline = require('readline');
+const { existsSync } = require('fs');
+const path = require('path');
 
-async function getChapterSelection(chaptersDisplay, chapterNumbers, displayToRealMap, allOption = '0') {
+async function confirmOverwrite(rl, chapterName) {
+  return new Promise((resolve) => {
+    rl.question(`\n⚠️  Глава "${chapterName}" уже существует!\n❓ Хотите перезаписать? (д/н): `, (answer) => {
+      resolve(answer.trim().toLowerCase() === 'д');
+    });
+  });
+}
+
+function checkChapterExists(fileName, chapterName) {
+  const bookDir = path.join('./output', fileName);
+  const fileToCheck = path.join(bookDir, `${chapterName.replace(/[^a-zA-Z0-9]/g, '_')}.txt`);
+  return existsSync(fileToCheck);
+}
+
+async function getChapterSelection(chaptersDisplay, chapterNumbers, displayToRealMap, allOption = '0', fileName, bookChapters) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
   });
 
-  return new Promise((resolve) => {
-    rl.question(
-      `\nВКакую главу сгенерировать?\n${chaptersDisplay}\nВведите номер главы или ${allOption} для всех: `,
-      (answer) => {
-        rl.close();
-        const trimmedAnswer = answer.trim().toLowerCase();
-        
-        if (trimmedAnswer === allOption) {
-          resolve(allOption);
-        } else {
-          const displayNum = parseInt(trimmedAnswer, 10);
-          const realNum = displayToRealMap.get(displayNum);
-          
-          if (isNaN(displayNum) || !realNum || !chapterNumbers.includes(realNum)) {
-            console.log('Некорректный ввод. Используем первую доступную главу.');
-            resolve(displayToRealMap.get(1).toString());
-          } else {
-            resolve(realNum.toString());
-          }
-        }
+  while (true) {
+    const menu = `
+╭──────────────────────────────────────────╮
+│            Выберите главу                │
+├──────────────────────────────────────────┤
+${chaptersDisplay}╰──────────────────────────────────────────╯
+🔍 Введите номер главы или ${allOption} для всех: `;
+
+    const answer = await new Promise((resolve) => {
+      rl.question(menu, (answer) => resolve(answer));
+    });
+
+    const trimmedAnswer = answer.trim().toLowerCase();
+    
+    if (trimmedAnswer === allOption) {
+      rl.close();
+      return allOption;
+    }
+
+    const displayNum = parseInt(trimmedAnswer, 10);
+    const realNum = displayToRealMap.get(displayNum);
+    
+    if (isNaN(displayNum) || !realNum || !chapterNumbers.includes(realNum)) {
+      console.log('\n❌ Некорректный ввод. Попробуйте еще раз.');
+      continue;
+    }
+
+    // Проверяем существование файла
+    const chapter = bookChapters[realNum - 1];
+    if (checkChapterExists(fileName, chapter.name)) {
+      const shouldOverwrite = await confirmOverwrite(rl, chapter.name);
+      if (!shouldOverwrite) {
+        console.log('\n↩️  Выберите другую главу');
+        continue;
       }
-    );
-  });
+    }
+
+    rl.close();
+    return realNum.toString();
+  }
 }
 
 function getChaptersToProcess(selectedChapters, chapterNumbers, displayToRealMap, allOption = '0') {

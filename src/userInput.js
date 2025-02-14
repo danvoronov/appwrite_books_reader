@@ -4,8 +4,10 @@ const path = require('path');
 
 async function confirmOverwrite(rl, chapterName) {
   return new Promise((resolve) => {
-    rl.question(`\n⚠️  Глава "${chapterName}" уже существует!\n❓ Хотите перезаписать? (д/н): `, (answer) => {
-      resolve(answer.trim().toLowerCase() === 'д');
+    rl.question(`\n⚠️  Глава "${chapterName}" уже существует!\n❓ Хотите перезаписать? [Д/н]: `, (answer) => {
+      const trimmedAnswer = answer.trim().toLowerCase();
+      // Если пустой ответ или 'д' - значит "да"
+      resolve(trimmedAnswer === '' || trimmedAnswer === 'д');
     });
   });
 }

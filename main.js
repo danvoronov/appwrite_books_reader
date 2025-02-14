@@ -1,5 +1,5 @@
 const { getEpubMetadata } = require('./src/openEpub');
-const { ensureOutputDirectory, writeBookTitle, createCombinedCardsFile } = require('./src/fileUtils');
+const { ensureOutputDirectory, writeBookTitle, createCombinedCardsFile, setDisplayOrder } = require('./src/fileUtils');
 const { formatChapterInfo, getValidChapterNumbers, mapDisplayNumberToReal } = require('./src/chapterFormatter');
 const { getChapterSelection, getChaptersToProcess } = require('./src/userInput');
 const { processChapters } = require('./src/bookProcessor');
@@ -21,10 +21,11 @@ const fileName = 'thesignalandthenoise';
     ensureOutputDirectory();
     
     const book = await getEpubMetadata(fileName);
-    writeBookTitle(fileName, book.title);
+    writeBookTitle(fileName, book.title, book.chapters);
 
     const chapterNumbers = getValidChapterNumbers(book.chapters);
     const formattedInfo = formatChapterInfo(chapterNumbers, book.chapters, 500, fileName);
+    setDisplayOrder(formattedInfo.displayToRealMap);
     
     let chaptersToGenerate;
     if (argv.n !== undefined) {

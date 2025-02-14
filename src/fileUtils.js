@@ -41,62 +41,54 @@ function writeChapterOutput(dirName, index, chapterName, json) {
 }
 
 let bookTitle = '';
+let bookChapters = [];
+let displayOrder = new Map(); // Добавляем хранение порядка отображения
 
-function writeBookTitle(fileName, title) {
-  bookTitle = title; // Сохраняем заголовок книги для использования в createCombinedCardsFile
+function writeBookTitle(fileName, title, chapters) {
+  bookTitle = title;
+  bookChapters = chapters;
+}
+
+// Добавляем функцию для сохранения порядка отображения
+function setDisplayOrder(displayToRealMap) {
+  displayOrder = new Map();
+  for (const [display, real] of displayToRealMap.entries()) {
+    const chapter = bookChapters[real - 1];
+    const normalizedName = chapter.name.replace(/[^a-zA-Z0-9]/g, '_');
+    displayOrder.set(normalizedName, display);
+  }
 }
 
 function createCombinedCardsFile(fileName) {
   const bookDir = path.join('./output', fileName);
   if (!existsSync(bookDir)) return;
 
-  // Определяем порядок специальных глав
-  const specialChaptersOrder = {
-    'INTRODUCTION': 0,
-    'CONCLUSION': 999999 // Гарантируем, что будет в конце
-  };
-
   const files = readdirSync(bookDir)
     .filter(file => file.endsWith('.txt'))
-    .sort((a, b) => {
-      const nameA = a.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
-      const nameB = b.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
-
-      // Проверяем, являются ли файлы специальными главами
-      const orderA = specialChaptersOrder[nameA.replace('.txt', '')] ?? -1;
-      const orderB = specialChaptersOrder[nameB.replace('.txt', '')] ?? -1;
-
-      // Если оба файла специальные, сортируем по их порядку
-      if (orderA >= 0 && orderB >= 0) {
-        return orderA - orderB;
-      }
-
-      // Если только один файл специальный
-      if (orderA >= 0) return orderA;
-      if (orderB >= 0) return -orderB;
-
-      // Для обычных глав ищем номера
-      const numA = parseInt(a.match(/\d+/)?.[0] || '0');
-      const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+    .map(file => {
+      const content = readFileSync(path.join(bookDir, file), 'utf8');
+      // Получаем название главы из первой строки (после ##)
+      const firstLine = content.split('\n')[0];
+      const chapterName = firstLine.replace(/^## /, '').trim();
       
-      // Если у обоих есть номера, сортируем по ним
-      if (numA && numB) {
-        return numA - numB;
-      }
-
-      // Если номер есть только у одного, приоритет файлу с номером
-      if (numA) return 1;
-      if (numB) return -1;
-
-      // Если нет номеров, сортируем по алфавиту
-      return nameA.localeCompare(nameB);
-    });
+      // Ищем соответствующую главу в displayOrder
+      const matchingChapter = bookChapters.find(ch => ch.name === chapterName);
+      if (!matchingChapter) return { filename: file, order: 999999 };
+      
+      const normalizedName = matchingChapter.name.replace(/[^a-zA-Z0-9]/g, '_');
+      return {
+        filename: file,
+        order: displayOrder.get(normalizedName) ?? 999999,
+        chapterName // сохраняем для отладки
+      };
+    })
+    .sort((a, b) => a.order - b.order);
 
   // Начинаем с заголовка книги
   let combinedContent = `# ${bookTitle}\n\n`;
   
   files.forEach(file => {
-    const content = readFileSync(path.join(bookDir, file), 'utf8');
+    const content = readFileSync(path.join(bookDir, file.filename), 'utf8');
     combinedContent += content + '\n\n';
   });
 
@@ -110,5 +102,6 @@ module.exports = {
   ensureBookDirectory,
   writeChapterOutput,
   writeBookTitle,
-  createCombinedCardsFile
+  createCombinedCardsFile,
+  setDisplayOrder
 }; 

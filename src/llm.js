@@ -16,8 +16,8 @@ function formatCharCount(count) {
 
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
-const model = "gemini-2.0-flash-thinking-exp-01-21" // "gemini-exp-1206"
-const secondModel = "gemini-exp-1206";
+const model = "gemini-2.5-flash" // "gemini-exp-1206"
+const secondModel = "gemini-2.5-flash";
 
 const systemInstruction = fs.readFileSync("./data/systemInstruction.txt", 'utf8');
 const primaryGenerator = genAI.getGenerativeModel({model, systemInstruction});

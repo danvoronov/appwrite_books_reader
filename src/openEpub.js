@@ -9,8 +9,8 @@ async function getEpubMetadata(epubfile) {
     const { title, creator, date } = epub.metadata;
     
     // Логируем информацию о главах и их MIME-типах
-    // console.log('Доступные главы:');
-    // epub.toc.forEach(t => console.log(`${t.title}: ${t.mime || 'MIME не указан'}`));
+    console.log('Доступные главы:');
+    epub.toc.forEach(t => console.log(`${t.title}: ${t.mime || 'MIME не указан'} (ID: ${t.id})`));
     
     // Фильтруем только текстовые главы и исключаем служебные разделы
     let chapters = epub.toc
@@ -18,12 +18,13 @@ async function getEpubMetadata(epubfile) {
         .map(t => ({ name: t.title, id: t.id }))
         .filter(exclude_chapters);
 
-    // console.log(`\nНайдено ${chapters.length} глав для обработки`);
+    console.log(`\nНайдено ${chapters.length} глав для обработки`);
 
     log(`Достаем главы в объект`);
     const processedChapters = [];
     for (let i = 0; i < chapters.length; i++) {
         const chapter = chapters[i];
+        console.log(`\nОбрабатываем главу ${i + 1}/${chapters.length}: "${chapter.name}" (ID: ${chapter.id})`);
         try {
             const data = await epub.getChapterAsync(chapter.id);
             if (data) {
@@ -32,9 +33,30 @@ async function getEpubMetadata(epubfile) {
                     ...chapter,
                     content: markdown
                 });
+                console.log(`✅ Глава "${chapter.name}" успешно обработана (${data.length} символов)`);
+            } else {
+                console.log(`⚠️ Глава "${chapter.name}" вернула пустые данные`);
             }
         } catch (err) {
-            console.log(`Пропускаем главу ${chapter.name} из-за ошибки:`, err.message);
+            console.log(`❌ Основной метод не сработал для главы "${chapter.name}":`, err.message);
+            
+            // Пробуем альтернативный способ через getChapter (синхронный)
+            try {
+                console.log(`🔄 Пробуем альтернативный метод для главы "${chapter.name}"`);
+                const data = epub.getChapter(chapter.id);
+                if (data) {
+                    const markdown = toMarkdown.turndown(data);
+                    processedChapters.push({
+                        ...chapter,
+                        content: markdown
+                    });
+                    console.log(`✅ Глава "${chapter.name}" обработана альтернативным методом (${data.length} символов)`);
+                } else {
+                    console.log(`⚠️ Альтернативный метод тоже вернул пустые данные для "${chapter.name}"`);
+                }
+            } catch (err2) {
+                console.log(`❌ Альтернативный метод тоже не сработал для "${chapter.name}":`, err2.message);
+            }
         }
     };
 

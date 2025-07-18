@@ -44,14 +44,13 @@ const argv = yargs(hideBin(process.argv))
     let book;
     
     if (existingResult.hasExisting && !argv['force-epub']) {
-      console.log(`\nИспользуем готовые главы из папки: ${existingResult.bookDir}`);
-      console.log(`Для принудительного чтения из epub используйте флаг --force-epub`);
+      console.log(`Используем готовые главы`);
       book = createBookFromExistingChapters(fileName, existingResult.chapters);
     } else {
       if (existingResult.hasExisting && argv['force-epub']) {
-        console.log(`\nПринудительное чтение из epub файла (найдены готовые главы, но используется --force-epub)`);
+        console.log(`Принудительное чтение из epub файла`);
       } else {
-        console.log(`\nОбработанные главы не найдены, читаем из epub файла...`);
+        console.log(`Текстовые файлы не найдены, читаем epub`);
       }
       book = await getEpubMetadata(fileName);
     }

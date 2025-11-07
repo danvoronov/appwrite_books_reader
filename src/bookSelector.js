@@ -6,6 +6,7 @@ const LAST_BOOK_FILE = './last_book.json';
 
 function getAvailableBooks() {
   const epubDir = '../epub';
+  const fs = require('fs');
   
   if (!existsSync(epubDir)) {
     throw new Error(`Папка ${epubDir} не найдена!`);
@@ -15,7 +16,16 @@ function getAvailableBooks() {
     const files = readdirSync(epubDir);
     const epubFiles = files
       .filter(file => file.toLowerCase().endsWith('.epub'))
-      .map(file => file.replace('.epub', ''));
+      .map(file => {
+        const filePath = path.join(epubDir, file);
+        const stats = fs.statSync(filePath);
+        return {
+          name: file.replace('.epub', ''),
+          mtime: stats.mtime.getTime()
+        };
+      })
+      .sort((a, b) => b.mtime - a.mtime) // Сортируем по убыванию даты изменения
+      .map(item => item.name);
     
     if (epubFiles.length === 0) {
       throw new Error(`В папке ${epubDir} не найдено .epub файлов!`);

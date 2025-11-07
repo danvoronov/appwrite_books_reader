@@ -26,6 +26,12 @@ function formatChapterInfo(chapters, bookChapters, minContentLength, fileName) {
   
   chapters.forEach((num, index) => {
     const chapter = bookChapters[num-1];
+    
+    // Проверяем что глава существует и валидна
+    if (!chapter || !chapter.content || !chapter.name) {
+      return;
+    }
+    
     const contentLength = chapter.content.length;
     if (contentLength >= minContentLength) {
       visibleChapterCount++;
@@ -74,12 +80,19 @@ function getValidChapterNumbers(chapters, minContentLength = 500) {
   const excludeChapters = ['COPYRIGHT', 'CONTENTS', 'NOTES', 'ACKNOWLEDGMENTS', 'INDEX'];
   
   return chapters
-    .map((chapter, index) => ({ 
-      index: index + 1, 
-      length: chapter.content.length,
-      name: chapter.name 
-    }))
+    .map((chapter, index) => {
+      // Проверяем что глава валидна
+      if (!chapter || !chapter.content || !chapter.name) {
+        return null;
+      }
+      return { 
+        index: index + 1, 
+        length: chapter.content.length,
+        name: chapter.name 
+      };
+    })
     .filter(chapter => 
+      chapter !== null &&
       chapter.length >= minContentLength && 
       !excludeChapters.includes(chapter.name.toUpperCase())
     )

@@ -16,6 +16,20 @@ function ensureBookDirectory(fileName) {
   return bookDir;
 }
 
+function findNextVersion(bookDir, baseName) {
+  const fs = require('fs');
+  let version = 1;
+  
+  // Ищем максимальный номер версии
+  while (true) {
+    const versionedFile = path.join(bookDir, `${baseName}.v${version}.txt`);
+    if (!existsSync(versionedFile)) {
+      return version;
+    }
+    version++;
+  }
+}
+
 function writeChapterOutput(dirName, index, chapterName, json) {
   if (!json || !json.chapter_cards || !json.chapter_cards.length) {
     console.log(`\n❌ ${chapterName} -- пустые данные. Пробуем еще раз...`)
@@ -26,13 +40,26 @@ function writeChapterOutput(dirName, index, chapterName, json) {
   const content = `## ${chapterName}\n\t${json.chapter_summary}\n\n${cardsText}\n\n`
 
   // превратим chapterName в название файла для виндовс убрал пробелы и спецсимволы
-  const fileToWrite = chapterName.replace(/[^a-zA-Z0-9]/g, '_')+'.txt';
+  const baseName = chapterName.replace(/[^a-zA-Z0-9]/g, '_');
+  const fileToWrite = baseName + '.txt';
 
   const bookDir = ensureBookDirectory(dirName);
   const filePath = path.join(bookDir, fileToWrite);
+  
   if (existsSync(filePath)) {
-    writeFileSync(path.join(bookDir, '_'+fileToWrite), content);
-    console.log(`\n📝 Дубликат ${fileToWrite} -- записан`)
+    // Файл существует - создаем версию
+    const version = findNextVersion(bookDir, baseName);
+    const versionedFilePath = path.join(bookDir, `${baseName}.v${version}.txt`);
+    
+    // Копируем старый файл в версию
+    const fs = require('fs');
+    const oldContent = fs.readFileSync(filePath, 'utf8');
+    fs.writeFileSync(versionedFilePath, oldContent);
+    console.log(`\n📦 Старая версия сохранена как: ${baseName}.v${version}.txt`);
+    
+    // Записываем новую версию в основной файл
+    writeFileSync(filePath, content);
+    console.log(`\n✅ ${fileToWrite} -- перезаписан (новая версия)`);
   } else {
     writeFileSync(filePath, content);
     console.log(`\n✅ ${fileToWrite} -- записан`)
@@ -54,6 +81,13 @@ function setDisplayOrder(displayToRealMap) {
   displayOrder = new Map();
   for (const [display, real] of displayToRealMap.entries()) {
     const chapter = bookChapters[real - 1];
+    
+    // Проверяем что глава существует
+    if (!chapter || !chapter.name) {
+      console.warn(`Chapter ${real} not found in bookChapters`);
+      continue;
+    }
+    
     const normalizedName = chapter.name.replace(/[^a-zA-Z0-9]/g, '_');
     displayOrder.set(normalizedName, display);
   }

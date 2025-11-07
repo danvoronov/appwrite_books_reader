@@ -33,34 +33,29 @@ function checkExistingChapters(bookName) {
     const allFiles = readdirSync(bookDir);
     console.log(`Все файлы в папке: ${allFiles.join(', ')}`);
     
-    const mdFiles = allFiles.filter(file => file.endsWith('.md'));
-    console.log(`Файлы .md: ${mdFiles.join(', ')}`);
+    // Поддерживаем как .txt, так и .md файлы
+    const txtFiles = allFiles.filter(file => file.endsWith('.txt') || file.endsWith('.md'));
+    console.log(`Файлы .txt/.md: ${txtFiles.join(', ')}`);
     
-    const files = mdFiles.filter(file => !file.startsWith('_')); // Исключаем дубликаты с префиксом _
-    console.log(`Файлы .md без префикса _: ${files.join(', ')}`);
+    const files = txtFiles.filter(file => !file.startsWith('_')); // Исключаем дубликаты с префиксом _
+    console.log(`Файлы .txt/.md без префикса _: ${files.join(', ')}`);
     
     if (files.length === 0) {
-      console.log(`В папке ${bookDir} нет подходящих .md файлов`);
+      console.log(`В папке ${bookDir} нет подходящих .txt/.md файлов`);
       return { hasExisting: false, chapters: [] };
     }
     
-    console.log(`Найдены markdown файлы: ${files.length}`);
+    console.log(`Найдены txt файлы: ${files.length}`);
     
     // Читаем содержимое файлов и извлекаем информацию о главах
-    const chapters = files
-      .map((file, index) => {
+    const chapters = files.map((file, index) => {
         const filePath = path.join(bookDir, file);
         const content = readFileSync(filePath, 'utf8');
-        
-        // Фильтруем главы меньше 5кб
-        if (content.length < 5000) {
-          return null;
-        }
         
         // Извлекаем название главы из первой строки (после ##)
         const lines = content.split('\n');
         const titleLine = lines.find(line => line.startsWith('## '));
-        const chapterName = titleLine ? titleLine.replace(/^## /, '').trim() : file.replace('.txt', '');
+        const chapterName = titleLine ? titleLine.replace(/^## /, '').trim() : file.replace(/\.(txt|md)$/, '');
         
         return {
           name: chapterName,
@@ -68,10 +63,9 @@ function checkExistingChapters(bookName) {
           content: content,
           fileName: file
         };
-      })
-      .filter(chapter => chapter !== null);
+      });
     
-    console.log(`Загружено ${chapters.length} глав (размер >= 5кб)`);
+    console.log(`Загружено ${chapters.length} существующих глав`);
     
     return { hasExisting: true, chapters, bookDir };
     

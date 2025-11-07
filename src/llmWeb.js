@@ -19,17 +19,23 @@ const genAI = new GoogleGenerativeAI(apiKey);
 const model = process.env.MODEL1;
 const secondModel = process.env.MODEL2;
 
-const systemInstruction = fs.readFileSync("./data/systemInstruction.txt", 'utf8');
-const primaryGenerator = genAI.getGenerativeModel({model, systemInstruction});
-const backupGenerator = genAI.getGenerativeModel({model: secondModel, systemInstruction});
+let systemInstruction = fs.readFileSync("./data/systemInstruction.txt", 'utf8');
+let primaryGenerator = genAI.getGenerativeModel({model, systemInstruction});
+let backupGenerator = genAI.getGenerativeModel({model: secondModel, systemInstruction});
 
 const generationConfig = {
   temperature: 0.3,
   topP: 0.95
 };
 
+// Функция для обновления системной инструкции
+function reloadSystemInstruction() {
+  systemInstruction = fs.readFileSync("./data/systemInstruction.txt", 'utf8');
+  primaryGenerator = genAI.getGenerativeModel({model, systemInstruction});
+  backupGenerator = genAI.getGenerativeModel({model: secondModel, systemInstruction});
+}
 
-async function run(text) {
+async function runWithProgress(text, progressCallback) {
   const maxRetries = 4;
   const emptyResponse = { chapter_summary: '', chapter_cards: [] };
 
@@ -42,11 +48,13 @@ async function run(text) {
       // Add delay before retries (skip first attempt)
       if (attempt > 1) {
         const delaySeconds = retryDelays[attempt - 2];
-        console.log(`Waiting ${delaySeconds*2} seconds before attempt ${attempt}...`);
+        const message = `Waiting ${delaySeconds*2} seconds before attempt ${attempt}...`;
+        progressCallback({ type: 'progress', message });
         await delay(delaySeconds * 1000*2);
       }
 
-      console.log(`Sending request to model ${currentModel} (attempt ${attempt}/${maxRetries})`);
+      const message = `Sending request to model ${currentModel} (attempt ${attempt}/${maxRetries})`;
+      progressCallback({ type: 'progress', message });
 
       const chatSession = currentGenerator.startChat({
         generationConfig,
@@ -69,7 +77,8 @@ async function run(text) {
           if (firstLine.includes('\n')) {
             isFirstLineComplete = true;
             if (!firstLine.trim().startsWith('```json')) {
-              console.log(`\nFirst line is not JSON format on attempt ${attempt}`);
+              const message = `First line is not JSON format on attempt ${attempt}`;
+              progressCallback({ type: 'progress', message });
               // Break the stream early - no need to continue reading
               break;
             }
@@ -78,13 +87,15 @@ async function run(text) {
 
         fullResponse += chunkText;
         characterCount += chunkText.length;
-        process.stdout.write(`\rReceived characters: ${formatCharCount(characterCount)}`);
+        const message = `Received characters: ${formatCharCount(characterCount)}`;
+        progressCallback({ type: 'progress', message });
       }
 
       // If we broke early due to invalid first line
       if (!firstLine.trim().startsWith('```json')) {
         if (attempt === maxRetries) {
-          console.log('All attempts exhausted - failed to get valid JSON response');
+          const message = 'All attempts exhausted - failed to get valid JSON response';
+          progressCallback({ type: 'error', message });
           return emptyResponse;
         }
         continue;
@@ -93,12 +104,18 @@ async function run(text) {
       // Parse JSON from the response
       const lines = fullResponse.trim().split('\n');
       const jsonLines = lines.slice(1, -1).join('\n');
-      return JSON.parse(jsonLines);
+      const result_data = JSON.parse(jsonLines);
+      
+      progressCallback({ type: 'success', message: 'Successfully processed chapter', data: result_data });
+      return result_data;
 
     } catch (error) {
-      console.error(`Error on attempt ${attempt}:`, error);
+      const message = `Error on attempt ${attempt}: ${error.message}`;
+      progressCallback({ type: 'error', message });
+      
       if (attempt === maxRetries) {
-        console.log('All attempts exhausted - returning empty response');
+        const message = 'All attempts exhausted - returning empty response';
+        progressCallback({ type: 'error', message });
         return emptyResponse;
       }
     }
@@ -107,4 +124,4 @@ async function run(text) {
   return emptyResponse;
 } 
 
-module.exports = { run };
+module.exports = { runWithProgress, reloadSystemInstruction };

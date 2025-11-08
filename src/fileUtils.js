@@ -126,11 +126,32 @@ function createCombinedCardsFile(fileName) {
   console.log(`\n📚 Создан общий файл: ${fileName}_cards.md`);
 }
 
+function writeJsonOutput(dirName, chapterName, json, suffix = 'tags') {
+  const fs = require('fs');
+  if (!json) return false;
+  const baseName = chapterName.replace(/[^a-zA-Z0-9]/g, '_');
+  const fileToWrite = `${baseName}.${suffix}.json`;
+  const bookDir = ensureBookDirectory(dirName);
+  const filePath = path.join(bookDir, fileToWrite);
+
+  if (existsSync(filePath)) {
+    // version old file
+    let v = 1;
+    while (existsSync(path.join(bookDir, `${baseName}.${suffix}.v${v}.json`))) v++;
+    const versioned = path.join(bookDir, `${baseName}.${suffix}.v${v}.json`);
+    const oldContent = fs.readFileSync(filePath, 'utf8');
+    fs.writeFileSync(versioned, oldContent);
+  }
+  writeFileSync(filePath, JSON.stringify(json, null, 2));
+  return filePath;
+}
+
 module.exports = {
   ensureOutputDirectory,
   ensureBookDirectory,
   writeChapterOutput,
   writeBookTitle,
   createCombinedCardsFile,
-  setDisplayOrder
+  setDisplayOrder,
+  writeJsonOutput
 }; 

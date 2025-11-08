@@ -124,4 +124,51 @@ async function runWithProgress(text, progressCallback) {
   return emptyResponse;
 } 
 
-module.exports = { runWithProgress, reloadSystemInstruction };
+async function runWithInstructionFile(text, instructionPath, progressCallback) {
+  const fs = require('fs');
+  const instr = fs.readFileSync(instructionPath, 'utf8');
+  const generator = genAI.getGenerativeModel({ model, systemInstruction: instr });
+
+  const maxRetries = 4;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 1) {
+        const delaySeconds = retryDelays[attempt - 2];
+        progressCallback && progressCallback({ type: 'progress', message: `Waiting ${delaySeconds*2} seconds before attempt ${attempt}...` });
+        await delay(delaySeconds * 1000*2);
+      }
+      progressCallback && progressCallback({ type: 'progress', message: `Sending request to model ${model} (attempt ${attempt}/${maxRetries})` });
+      const chatSession = generator.startChat({ generationConfig, history: [{ role: 'user', parts: [{ text }] }] });
+      const result = await chatSession.sendMessageStream('');
+      let fullResponse = '';
+      let firstLine = '';
+      let isFirstLineComplete = false;
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        if (!isFirstLineComplete) {
+          firstLine += chunkText;
+          if (firstLine.includes('\n')) {
+            isFirstLineComplete = true;
+          }
+        }
+        fullResponse += chunkText;
+      }
+      // Try parse as code block json first
+      let jsonText = fullResponse.trim();
+      if (jsonText.startsWith('```')) {
+        const lines = jsonText.split('\n');
+        if (lines[0].includes('json')) {
+          jsonText = lines.slice(1, -1).join('\n');
+        }
+      }
+      const parsed = JSON.parse(jsonText);
+      progressCallback && progressCallback({ type: 'success', message: 'Successfully processed tags JSON' });
+      return parsed;
+    } catch (err) {
+      progressCallback && progressCallback({ type: 'error', message: `Error on attempt ${attempt}: ${err.message}` });
+      if (attempt === maxRetries) throw err;
+    }
+  }
+}
+
+module.exports = { runWithProgress, reloadSystemInstruction, runWithInstructionFile };

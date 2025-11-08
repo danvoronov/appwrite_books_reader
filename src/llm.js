@@ -42,11 +42,8 @@ async function run(text) {
       // Add delay before retries (skip first attempt)
       if (attempt > 1) {
         const delaySeconds = retryDelays[attempt - 2];
-        console.log(`Waiting ${delaySeconds*2} seconds before attempt ${attempt}...`);
         await delay(delaySeconds * 1000*2);
       }
-
-      console.log(`Sending request to model ${currentModel} (attempt ${attempt}/${maxRetries})`);
 
       const chatSession = currentGenerator.startChat({
         generationConfig,
@@ -69,7 +66,6 @@ async function run(text) {
           if (firstLine.includes('\n')) {
             isFirstLineComplete = true;
             if (!firstLine.trim().startsWith('```json')) {
-              console.log(`\nFirst line is not JSON format on attempt ${attempt}`);
               // Break the stream early - no need to continue reading
               break;
             }
@@ -83,10 +79,6 @@ async function run(text) {
 
       // If we broke early due to invalid first line
       if (!firstLine.trim().startsWith('```json')) {
-        if (attempt === maxRetries) {
-          console.log('All attempts exhausted - failed to get valid JSON response');
-          return emptyResponse;
-        }
         continue;
       }
 
@@ -96,9 +88,8 @@ async function run(text) {
       return JSON.parse(jsonLines);
 
     } catch (error) {
-      console.error(`Error on attempt ${attempt}:`, error);
       if (attempt === maxRetries) {
-        console.log('All attempts exhausted - returning empty response');
+        console.error('LLM error:', error.message);
         return emptyResponse;
       }
     }

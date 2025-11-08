@@ -25,17 +25,12 @@ async function getEpubMetadata(epubfile) {
     const epub = await EPub.createAsync('../epub/' + epubfile + '.epub');
     const { title, creator, date } = epub.metadata;
     
-    console.log('=== READING FROM EPUB FILE ===');
-    console.log(`File: ${epubfile}.epub`);
-    
     // Фильтруем только текстовые главы и исключаем служебные разделы
     // Сохраняем информацию о level для группировки
     let chapters = epub.toc
         .filter(t => !t.mime || t.mime.includes('html') || t.mime.includes('text'))
-        .map(t => ({ name: t.title, id: t.id, level: t.level || 0 }))
+        .map(t => ({ name: t.title, id: t.id, level: t.level || 0, href: t.href }))
         .filter(exclude_chapters);
-
-    console.log(`Обрабатываем ${chapters.length} глав из epub файла...`);
     
     const processedChapters = [];
     let currentGroup = null;
@@ -50,7 +45,6 @@ async function getEpubMetadata(epubfile) {
         if (chapter.level === 0 && sectionHeaders.includes(chapter.name)) {
             // Это заголовок раздела
             currentGroup = chapter.name;
-            console.log(`\n📂 Раздел: ${currentGroup}`);
             continue;
         }
         
@@ -61,8 +55,6 @@ async function getEpubMetadata(epubfile) {
         try {
             // Получаем все части главы (основная + продолжения)
             const chapterParts = getChapterParts(epub, chapter.id);
-            console.log(`  Глава "${chapter.name}": найдено частей: ${chapterParts.length}`);
-            
             let combinedMarkdown = '';
             
             for (const partId of chapterParts) {
@@ -73,8 +65,6 @@ async function getEpubMetadata(epubfile) {
                         combinedMarkdown += markdown + '\n\n';
                     }
                 } catch (err) {
-                    console.log(`    Ошибка при чтении части ${partId}: ${err.message}`);
-                    
                     // Пробуем найти правильный ID в manifest по href
                     const tocItem = epub.toc.find(t => t.id === partId);
                     if (tocItem && tocItem.href) {
@@ -85,16 +75,14 @@ async function getEpubMetadata(epubfile) {
                         
                         if (manifestEntry) {
                             const correctId = manifestEntry[0];
-                            console.log(`    Нашли правильный ID в manifest: ${correctId}`);
                             try {
                                 const data = await epub.getChapterAsync(correctId);
                                 if (data) {
                                     const markdown = toMarkdown.turndown(data);
                                     combinedMarkdown += markdown + '\n\n';
-                                    console.log(`    ✓ Прочитано через manifest ID`);
                                 }
                             } catch (err3) {
-                                console.log(`    ✗ И это не сработало: ${err3.message}`);
+                                console.error(`Ошибка чтения главы ${chapter.name}:`, err3.message);
                             }
                         }
                     }
@@ -108,20 +96,15 @@ async function getEpubMetadata(epubfile) {
                     content: combinedMarkdown.trim(),
                     group: currentGroup // Добавляем информацию о группе
                 });
-                console.log(`    ✓ Загружено ${combinedMarkdown.length} символов`);
-            } else {
-                console.log(`    ✗ Пропущено (${combinedMarkdown.length} < 5000 символов)`);
             }
         } catch (err) {
-            console.log(`    ✗ Ошибка при обработке главы: ${err.message}`);
+            console.error(`Ошибка обработки главы ${chapter.name}:`, err.message);
         }
     }
 
     if (processedChapters.length === 0) {
         throw new Error('Не удалось обработать ни одной главы');
     }
-
-    console.log(`Загружено ${processedChapters.length} глав (размер >= 5кб)`);
 
     return {
         title: `${title || 'Без названия'} — ${creator || 'Неизвестный автор'} (${date ? date.substring(0, 4) : 'н/д'})`,

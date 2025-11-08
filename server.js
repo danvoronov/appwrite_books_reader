@@ -370,6 +370,31 @@ fastify.post('/api/tags/request', async (request, reply) => {
   }
 });
 
+// Get tags JSON for chapter
+fastify.post('/api/tags/get', async (request, reply) => {
+  try {
+    const { bookName, chapterName } = request.body || {};
+    if (!bookName || !chapterName) {
+      return reply.code(400).send({ error: 'bookName and chapterName required' });
+    }
+    const { ensureBookDirectory } = require('./src/fileUtils');
+    const path = require('path');
+    const fs = require('fs');
+    const bookDir = ensureBookDirectory(bookName);
+    const baseName = chapterName.replace(/[^a-zA-Z0-9]/g, '_');
+    const filePath = path.join(bookDir, `${baseName}.tags.json`);
+    if (!fs.existsSync(filePath)) {
+      return reply.code(404).send({ error: 'Tags not found' });
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    const json = JSON.parse(content);
+    return { success: true, data: json, filePath };
+  } catch (error) {
+    request.log.error(error);
+    reply.code(500).send({ error: error.message });
+  }
+});
+
 // Health check
 fastify.get('/api/health', async (request, reply) => {
   try {

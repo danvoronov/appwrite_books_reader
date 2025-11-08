@@ -320,7 +320,21 @@ export class ChapterReader {
 
     processChapterHtml(content) {
         let html = window.marked ? window.marked.parse(content) : content;
+        html = this.separateFooter(html);
         return this.rewriteEpubUrls(html, this.bp.selectedBook);
+    }
+
+    separateFooter(html) {
+        // Находим горизонтальную линию <hr>, после которой идет футер
+        const hrMatch = html.match(/(<hr\s*\/?>)/i);
+        if (!hrMatch) return html;
+        
+        const hrIndex = html.indexOf(hrMatch[0]);
+        const beforeHr = html.slice(0, hrIndex);
+        const afterHr = html.slice(hrIndex + hrMatch[0].length);
+        
+        // Оборачиваем футер в div с классом для стилизации
+        return `${beforeHr}<hr><div class="chapter-footer">${afterHr}</div>`;
     }
 
     annotateHtml(htmlStr, raw, tags) {
@@ -366,7 +380,7 @@ export class ChapterReader {
             const typeClass = r.type ? ` type-${String(r.type)}` : '';
             const spanId = r._anchorId ? r._anchorId : (Number.isFinite(r._rid) ? `tag_${r._rid}` : '');
             const idAttr = spanId ? ` id="${spanId}"` : '';
-            const replacement = `${sMatch[0]}<span${idAttr} class="tag-underline${typeClass}">${middle}${eMatch[0]}</span>`;
+            const replacement = `<span${idAttr} class="tag-underline${typeClass}">${sMatch[0]}${middle}${eMatch[0]}</span>`;
             result = result.slice(0, sIdxHtml) + replacement + result.slice(eIdxHtml);
         }
         return result;
@@ -450,7 +464,7 @@ export class ChapterReader {
             const text = safe(c.t || 'Комментарий');
             items.push({
                 order: c._pos ?? 0,
-                html: `<div class="tag-right-item" data-anchor="${c.anchorId}"><span class="tag-comment-anchor">💬</span>${text}</div>`
+                html: `<div class="tag-right-item" data-anchor="${c.anchorId}">${text}</div>`
             });
         });
         

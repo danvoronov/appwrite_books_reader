@@ -16,36 +16,26 @@ function checkExistingChapters(bookName) {
   
   // Ищем существующую папку
   for (const testPath of possiblePaths) {
-    console.log(`Проверяем путь: ${path.resolve(testPath)}`);
     if (existsSync(testPath)) {
       bookDir = testPath;
-      console.log(`Найдена папка: ${path.resolve(bookDir)}`);
       break;
     }
   }
   
   if (!bookDir) {
-    console.log(`Папка для книги "${bookName}" не найдена ни по одному из путей`);
     return { hasExisting: false, chapters: [] };
   }
   
   try {
     const allFiles = readdirSync(bookDir);
-    console.log(`Все файлы в папке: ${allFiles.join(', ')}`);
     
     // Поддерживаем как .txt, так и .md файлы
     const txtFiles = allFiles.filter(file => file.endsWith('.txt') || file.endsWith('.md'));
-    console.log(`Файлы .txt/.md: ${txtFiles.join(', ')}`);
-    
     const files = txtFiles.filter(file => !file.startsWith('_')); // Исключаем дубликаты с префиксом _
-    console.log(`Файлы .txt/.md без префикса _: ${files.join(', ')}`);
     
     if (files.length === 0) {
-      console.log(`В папке ${bookDir} нет подходящих .txt/.md файлов`);
       return { hasExisting: false, chapters: [] };
     }
-    
-    console.log(`Найдены txt файлы: ${files.length}`);
     
     // Читаем содержимое файлов и извлекаем информацию о главах
     const chapters = files.map((file, index) => {
@@ -65,12 +55,10 @@ function checkExistingChapters(bookName) {
         };
       });
     
-    console.log(`Загружено ${chapters.length} существующих глав`);
-    
     return { hasExisting: true, chapters, bookDir };
     
   } catch (error) {
-    console.log(`Ошибка при чтении папки ${bookDir}:`, error.message);
+    console.error(`Ошибка чтения папки ${bookDir}:`, error.message);
     return { hasExisting: false, chapters: [] };
   }
 }

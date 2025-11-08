@@ -589,8 +589,170 @@ class BookProcessor {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Ошибка загрузки главы');
+
+            // Пытаемся получить теги для разметки
+            let tags = null;
+            try {
+                const tagResp = await fetch('/api/tags/get', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookName: this.selectedBook, chapterName: chapter.name })
+                });
+                if (tagResp.ok) {
+                    const tagJson = await tagResp.json();
+                    // Извлекаем термы из произвольной структуры: собираем все объекты с s/e или s/e как строки
+                    const collectTerms = (node, out=[]) => {
+                        try {
+                            if (!node) return out;
+                            if (Array.isArray(node)) {
+                                // если это массив значений s/e как строки (например, цитаты) — пропустим
+                                if (node.length && typeof node[0] === 'string') return out;
+                                for (const it of node) collectTerms(it, out);
+                            } else if (typeof node === 'object') {
+                                const hasRange = Object.prototype.hasOwnProperty.call(node, 's') && Object.prototype.hasOwnProperty.call(node, 'e');
+                                if (hasRange) out.push(node);
+                                for (const k of Object.keys(node)) collectTerms(node[k], out);
+                            }
+                        } catch(_) {}
+                        return out;
+                    };
+                    // Превращаем s/e из строчек в диапазоны индексов по исходному тексту
+                    // Для этого ищем первое вхождение подстроки node.s и node.e в raw и берем индексы
+                    const raw = data.content;
+                    const toRanges = (list) => {
+                        const res = [];
+                        let lastIdx = 0;
+                        const safeIndexOf = (hay, needle, from) => {
+                            if (!needle) return -1;
+                            return hay.indexOf(needle, from);
+                        };
+                        for (const it of list) {
+                            const sText = String(it.s || '');
+                            const eText = String(it.e || '');
+                            let sIdx = safeIndexOf(raw, sText, lastIdx);
+                            if (sIdx === -1) sIdx = safeIndexOf(raw, sText, 0);
+                            let ePos = safeIndexOf(raw, eText, sIdx >= 0 ? sIdx + sText.length : 0);
+                            if (sIdx >= 0 && ePos >= 0) {
+                                const eIdx = ePos + eText.length;
+                                res.push({ ...it, s: sIdx, e: eIdx, _sText: sText, _eText: eText });
+                                lastIdx = eIdx; // чтобы последующие поиски искали дальше по тексту
+                            }
+                        }
+                        return res;
+                    };
+                    const collected = collectTerms(tagJson?.data || tagJson);
+                    // присвоим тип на основе ключей верхнего уровня (def, ex, tip, q), если можем
+                    const top = tagJson?.data || tagJson;
+                    const typed = [];
+                    const assignType = (node, parentKey) => {
+                        if (!node) return;
+                        if (Array.isArray(node)) {
+                            for (const it of node) assignType(it, parentKey);
+                        } else if (typeof node === 'object') {
+                            const keys = Object.keys(node);
+                            const isRange = keys.includes('s') && keys.includes('e');
+                            if (isRange) {
+                                typed.push({ ...node, _type: parentKey });
+                            }
+                            for (const k of keys) assignType(node[k], k);
+                        }
+                    };
+                    assignType(top, '');
+                    const terms = toRanges(typed).map(it => ({ ...it, type: it._type || undefined }));
+
+                    // извлекаем комментарии (a/t) и пытаемся проставить якоря по тексту 'a'
+                    const comments = [];
+                    const collectComments = (node) => {
+                        if (!node) return;
+                        if (Array.isArray(node)) return node.forEach(collectComments);
+                        if (typeof node === 'object') {
+                            if (Object.prototype.hasOwnProperty.call(node, 'a') && Object.prototype.hasOwnProperty.call(node, 't')) {
+                                comments.push({ a: String(node.a||''), t: String(node.t||'') });
+                            }
+                            Object.values(node).forEach(collectComments);
+                        }
+                    };
+                    collectComments(top);
+                    // найдём позиции для a-цитат, чтобы сделать якоря
+                    let cIdx = 0;
+                    const right = comments.map(c => {
+                        const aText = (c.a || '').trim();
+                        let pos = aText ? raw.indexOf(aText) : -1;
+                        if (pos === -1 && aText) pos = raw.indexOf(aText, 0);
+                        let anchorId = '';
+                        if (pos >= 0) {
+                            anchorId = `tag_c_${cIdx++}`;
+                            terms.push({ s: pos, e: pos + aText.length, a: '', type: 'comment', _anchorId: anchorId, _isAnchorOnly: true });
+                        }
+                        return { t: c.t, a: c.a, anchorId, _pos: pos };
+                    });
+
+                    tags = { terms, comments: right };
+                    console.log('Tags loaded:', { count: terms.length, sample: terms[0] });
+                } else {
+                    console.warn('Tags not found (status):', tagResp.status);
+                }
+            } catch (_) {}
+
             let html = (window.marked ? window.marked.parse(data.content) : data.content);
             html = this.rewriteEpubUrls(html, this.selectedBook);
+
+            // Если есть теги, создаём аннотированную версию, но показываем её поверх уже отрендеренного HTML, сохраняя форматирование.
+            // Для этого заменим в HTML только фрагменты, найденные по исходному тексту.
+            if (tags && Array.isArray(tags.terms) && tags.terms.length > 0) {
+                try {
+                    const annotateInHtml = (htmlStr, raw, ranges) => {
+                        // Встраиваем подсветку поверх HTML; для _isAnchorOnly вставляем только эмодзи-комментарий
+                        let result = htmlStr;
+                        const byStart = [...ranges].sort((a,b) => b.s - a.s);
+                        const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        for (const r of byStart) {
+                            const sText = r._sText || raw.slice(r.s, Math.min(r.s + 80, r.e));
+                            const eText = r._isAnchorOnly ? '' : (r._eText || raw.slice(Math.max(r.e - 80, r.s), r.e));
+                            const sRe = new RegExp(escapeReg(sText));
+                            const sMatch = result.match(sRe);
+                            if (!sMatch) continue;
+                            const sIdxHtml = result.indexOf(sMatch[0]);
+                            if (r._isAnchorOnly) {
+                                const idAttr = r._anchorId ? ` id=\"${r._anchorId}\"` : '';
+                                const before = result.slice(0, sIdxHtml);
+                                const after = result.slice(sIdxHtml);
+                                result = `${before}<span${idAttr} class=\"tag-comment-emoji\">💬</span>${after}`;
+                                continue;
+                            }
+                            const afterS = result.slice(sIdxHtml + sMatch[0].length);
+                            const eRe = new RegExp(escapeReg(eText));
+                            const eMatch = afterS.match(eRe);
+                            if (!eMatch) continue;
+                            const eIdxHtml = sIdxHtml + sMatch[0].length + afterS.indexOf(eMatch[0]) + eMatch[0].length;
+                            const middle = result.slice(sIdxHtml + sMatch[0].length, eIdxHtml - eMatch[0].length);
+                            const typeClass = r.type ? ` type-${String(r.type)}` : '';
+                            const spanId = r._anchorId ? r._anchorId : (Number.isFinite(r._rid) ? `tag_${r._rid}` : '');
+                            const idAttr = spanId ? ` id=\"${spanId}\"` : '';
+                            const replacement = `${sMatch[0]}<span${idAttr} class=\"tag-underline${typeClass}\">${middle}${eMatch[0]}</span>`;
+                            result = result.slice(0, sIdxHtml) + replacement + result.slice(eIdxHtml);
+                        }
+                        return result;
+                    };
+                    // Пронумеруем диапазоны для стабильных якорей
+                    const rangesWithIds = tags.terms.map((r, i) => ({ ...r, _rid: i }));
+                    html = annotateInHtml(html, data.content, rangesWithIds);
+                    this.renderRightTags({ ...tags, terms: rangesWithIds }, html);
+                } catch (err) {
+                    console.warn('Annotate HTML failed, fallback to plain annotation', err);
+                    const annotated = this.buildAnnotatedHtmlFromRanges(data.content, tags.terms);
+                    if (annotated) {
+                        html = annotated;
+                        this.renderRightTags(tags, html);
+                    } else {
+                        this.renderRightTags([]);
+                    }
+                }
+            } else {
+                // Нет валидных тегов — не трогаем оригинальную HTML-разметку
+                this.renderRightTags([]);
+            }
+
             if (summaryEl) {
                 if (summaryHtml) {
                     summaryEl.innerHTML = summaryHtml;
@@ -606,7 +768,30 @@ class BookProcessor {
                 const chars = data.content ? data.content.length : 0;
                 const approxTokens = Math.max(1, Math.round(chars / 4));
                 const tokensK = Math.max(1, Math.round(approxTokens / 1000));
-                metaEl.textContent = `Длина текста: ${formatNumber(chars)} символов, ${tokensK}к токенов`;
+
+                // Считаем статистику по тегам (локализовано на русский), если они есть
+                const tagStats = (() => {
+                    try {
+                        const terms = tags && Array.isArray(tags.terms) ? tags.terms : [];
+                        const comments = tags && Array.isArray(tags.comments) ? tags.comments : [];
+                        const total = terms.length + comments.length;
+                        if (!total) return '';
+                        const ru = { def: 'определения', ex: 'истории', tip: 'советы', q: 'сомнительное', comment: 'комментарии' };
+                        const byType = { def: 0, ex: 0, tip: 0, q: 0, comment: 0 };
+                        terms.forEach(item => {
+                            const k = (item.type || '').toLowerCase();
+                            if (byType.hasOwnProperty(k)) byType[k]++;
+                        });
+                        byType.comment = comments.length;
+                        const parts = Object.entries(byType)
+                          .filter(([_,v]) => v > 0)
+                          .map(([k,v]) => `${ru[k] || k}: ${v}`)
+                          .join(', ');
+                        return `. Теги: ${total}${parts ? ' (' + parts + ')' : ''}`;
+                    } catch(_) { return ''; }
+                })();
+
+                metaEl.textContent = `Длина текста: ${formatNumber(chars)} символов, ${tokensK}к токенов${tagStats}`;
                 metaEl.style.display = '';
             }
             container.innerHTML = html;
@@ -835,7 +1020,8 @@ class BookProcessor {
 
             // Финальное обновление прогресс-бара
             this.updateProgressBar(100, 'Обработка завершена!', 
-                `Готово: ${successCount}/${this.totalChapters} глав`, 'Завершено');
+                `Готово: ${successCount}/${this.totalChapters}`,
+                '');
             
         } catch (error) {
             this.addToProgressLog(`❌ Ошибка: ${error.message}`);
@@ -975,6 +1161,134 @@ class BookProcessor {
 
     
     
+    buildAnnotatedHtmlFromRanges(rawText, terms) {
+        try {
+            if (!rawText) return '';
+            const list = [];
+            for (let i = 0; i < terms.length; i++) {
+                const item = terms[i];
+                if (typeof item.s === 'number' && typeof item.e === 'number' && item.e > item.s) {
+                    list.push({ idx: i, s: item.s, e: item.e, a: item.a || '', t: item.t || '' });
+                }
+            }
+            list.sort((x, y) => x.s - y.s);
+            // Merge overlapping to avoid broken HTML
+            const merged = [];
+            for (const r of list) {
+                if (!merged.length || r.s >= merged[merged.length - 1].e) {
+                    merged.push({ ...r });
+                } else {
+                    // overlap: extend end and concatenate comments
+                    merged[merged.length - 1].e = Math.max(merged[merged.length - 1].e, r.e);
+                    merged[merged.length - 1].a = [merged[merged.length - 1].a, r.a].filter(Boolean).join(' | ');
+                    merged[merged.length - 1].t = [merged[merged.length - 1].t, r.t].filter(Boolean).join(' \n ');
+                }
+            }
+            let out = '';
+            let cursor = 0;
+            const clamp = (x, min, max) => Math.max(min, Math.min(max, x));
+            const textLen = rawText.length;
+            for (let i = 0; i < merged.length; i++) {
+                const r0 = merged[i];
+                const r = { ...r0, s: clamp(r0.s, 0, textLen), e: clamp(r0.e, 0, textLen) };
+                if (r.e <= r.s) continue;
+                const safe = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                const chunkBefore = rawText.slice(cursor, r.s);
+                const chunkTag = rawText.slice(r.s, r.e);
+                out += safe(chunkBefore).replace(/\n/g,'<br>');
+                const typeClass = r.type ? ` type-${safe(String(r.type))}` : '';
+                const idAttr = r._anchorId ? ` id=\"${r._anchorId}\"` : ` id=\"tag_${i}\"`;
+                out += `<span${idAttr} class=\"tag-underline${typeClass}\">${safe(chunkTag)}${r.a ? `<span class=\"tag-comment\">${safe(r.a)}</span>` : ''}</span>`;
+                cursor = r.e;
+            }
+            out += rawText.slice(cursor).replace(/\n/g,'<br>');
+            return out;
+        } catch (e) {
+            console.error('annotate error', e);
+            return '';
+        }
+    }
+
+    renderRightTags(tagData, htmlStr) {
+        // Абсолютное позиционирование по высоте соответствующих левых фрагментов
+        // Синхронизация при скролле/ресайзе
+        const layout = () => {
+            // Найдём общий контейнер для вычисления относительных координат
+            const main = document.getElementById('readerMain');
+            const side = document.getElementById('readerSide');
+            if (!side || !main) return;
+            const mainRect = main.getBoundingClientRect();
+
+            // Соберём якоря слева (включая 💬)
+            const anchors = {};
+            const spans = main.querySelectorAll('[id^="tag_"], .tag-comment-emoji[id]');
+            spans.forEach(el => { anchors[el.id] = el.getBoundingClientRect(); });
+
+            // Расставим карточки справа по top, сопоставив с якорями
+            const cards = Array.from(side.querySelectorAll('.tag-right-item'));
+            cards.forEach(card => {
+                const anchorId = card.getAttribute('data-anchor');
+                if (!anchorId || !anchors[anchorId]) return;
+                const ar = anchors[anchorId];
+                const top = ar.top - mainRect.top + side.scrollTop; // позиция внутри правой колонки
+                card.style.top = `${Math.max(0, Math.floor(top))}px`;
+            });
+
+            // Устраним наложения справа минимально (4px), сохранив относительный порядок
+            cards.sort((a,b) => (parseInt(a.style.top)||0) - (parseInt(b.style.top)||0));
+            let lastBottom = -Infinity;
+            cards.forEach(card => {
+                const t = parseInt(card.style.top)||0;
+                const h = card.getBoundingClientRect().height;
+                if (t < lastBottom + 4) {
+                    card.style.top = `${lastBottom + 4}px`;
+                }
+                lastBottom = (parseInt(card.style.top)||0) + h;
+            });
+        };
+        // подвяжем события
+        const bind = () => {
+            layout();
+            window.addEventListener('resize', layout);
+            const main = document.getElementById('readerMain');
+            if (main) main.addEventListener('scroll', layout, { passive: true });
+            const side = document.getElementById('readerSide');
+            if (side) side.addEventListener('scroll', layout, { passive: true });
+        };
+        setTimeout(bind, 0);
+
+        // Далее — существующий рендер контента правой колонки
+
+        const side = document.getElementById('readerSide');
+        if (!side) return;
+        const terms = tagData && Array.isArray(tagData.terms) ? tagData.terms : [];
+        const comments = tagData && Array.isArray(tagData.comments) ? tagData.comments : [];
+        if (!terms.length && !comments.length) { side.innerHTML=''; console.log('No terms for right column'); return; }
+        const safe = (s) => (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+        // Подготовим позиции для сортировки по вертикали: используем s-индекс (у коммента — позиция якоря)
+        const items = [];
+        terms.forEach((t, i) => {
+            if (t._isAnchorOnly) return; // технич. якорь не показываем сам по себе
+            items.push({ order: t.s ?? 0, render: () => {
+                const type = (t.type || '').toLowerCase();
+                const ru = { def: 'Определение', ex: 'История', tip: 'Совет', q: 'Сомнительное' };
+                const chip = `<span class=\"tag-type-chip ${type}\">${ru[type] || type || 'Метка'}</span>`;
+                const text = safe(t.t || '');
+                const anchor = Number.isFinite(t._rid) ? `tag_${t._rid}` : '';
+                return `<div class=\"tag-right-item\" data-anchor=\"${anchor}\">${chip}<span>${text}</span></div>`;
+            }});
+        });
+        comments.forEach((c) => {
+            const text = safe(c.t || 'Комментарий');
+            items.push({ order: c._pos ?? 0, render: () => `<div class=\"tag-right-item\"><span class=\"tag-comment-anchor\"></span>${text}</div>` });
+        });
+
+        items.sort((a,b) => a.order - b.order);
+        side.innerHTML = items.map(it => it.render()).join('');
+        console.log('Right column rendered:', items.length, 'items');
+    }
+
     rewriteEpubUrls(html, bookName) {
         try {
             const wrapper = document.createElement('div');

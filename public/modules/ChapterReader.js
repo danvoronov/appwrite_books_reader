@@ -257,7 +257,15 @@ export class ChapterReader {
             
             if (sIdx >= 0 && ePos >= 0) {
                 const eIdx = ePos + eText.length;
-                res.push({ ...it, s: sIdx, e: eIdx, _sText: sText, _eText: eText });
+                // Сохраняем все поля включая 't' (текст термина)
+                res.push({ 
+                    ...it, 
+                    s: sIdx, 
+                    e: eIdx, 
+                    _sText: sText, 
+                    _eText: eText,
+                    t: it.t || '' // явно сохраняем текст термина
+                });
                 lastIdx = eIdx;
             }
         }
@@ -417,32 +425,38 @@ export class ChapterReader {
             return;
         }
         
-        let html = '';
-        const safe = (s) => Utils.escapeHtml(s);
+        const safe = (s) => Utils.escapeHtml(s || '');
         
-        terms.forEach((item, idx) => {
-            const anchorId = item._anchorId || (Number.isFinite(item._rid) ? `tag_${item._rid}` : '');
-            if (!anchorId) return;
-            const typeClass = item.type ? ` type-${String(item.type)}` : '';
-            const rawText = item._sText && item._eText ? item._sText + '...' + item._eText : '';
-            html += `
-                <div class="tag-right-item${typeClass}" data-anchor="${anchorId}">
-                    <div class="tag-right-term">${safe(rawText)}</div>
-                </div>
-            `;
+        // Собираем элементы для сортировки по позиции в тексте
+        const items = [];
+        
+        terms.forEach((t, i) => {
+            if (t._isAnchorOnly) return; // технический якорь не показываем
+            
+            const type = (t.type || '').toLowerCase();
+            const ru = { def: 'Определение', ex: 'История', tip: 'Совет', q: 'Сомнительное' };
+            const chip = `<span class="tag-type-chip ${type}">${ru[type] || type || 'Метка'}</span>`;
+            const text = safe(t.t || '');
+            const anchor = Number.isFinite(t._rid) ? `tag_${t._rid}` : '';
+            
+            items.push({
+                order: t.s ?? 0,
+                html: `<div class="tag-right-item" data-anchor="${anchor}">${chip}<span>${text}</span></div>`
+            });
         });
         
-        comments.forEach(c => {
+        comments.forEach((c) => {
             if (!c.anchorId) return;
-            html += `
-                <div class="tag-right-item type-comment" data-anchor="${c.anchorId}">
-                    <div class="tag-right-comment">💬 ${safe(c.t)}</div>
-                    ${c.a ? `<div class="tag-right-anchor">${safe(c.a)}</div>` : ''}
-                </div>
-            `;
+            const text = safe(c.t || 'Комментарий');
+            items.push({
+                order: c._pos ?? 0,
+                html: `<div class="tag-right-item" data-anchor="${c.anchorId}"><span class="tag-comment-anchor">💬</span>${text}</div>`
+            });
         });
         
-        side.innerHTML = html;
+        // Сортируем по позиции в тексте
+        items.sort((a, b) => a.order - b.order);
+        side.innerHTML = items.map(it => it.html).join('');
     }
 
     rewriteEpubUrls(html, bookName) {

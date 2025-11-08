@@ -107,6 +107,220 @@ fastify.post('/api/open-file', async (request, reply) => {
   }
 });
 
+// Удалено: get-chapter-html (возврат к markdown-потоку)
+/* fastify.post('/api/get-chapter-html', async (request, reply) => {
+  try {
+    const { bookName, chapterHref, chapterId, chapterIndex } = request.body;
+    const { EPub } = require('epub2');
+    
+    if (!bookName) {
+      return reply.code(400).send({ error: 'Book name is required' });
+    }
+    
+    // Открываем EPUB напрямую (не через markdown-обработчик)
+    const epubPath = `../epub/${bookName}.epub`;
+    const epub = await EPub.createAsync(epubPath);
+
+    let html = null;
+
+    // 1) Если есть ID — пробуем по нему
+    if (chapterId) {
+      try {
+        html = await epub.getChapterAsync(chapterId);
+      } catch (_) {}
+    }
+
+    // 2) Если по ID не получилось — пробуем найти по href
+    if (!html && chapterHref) {
+      const hrefNoAnchor = chapterHref.split('#')[0];
+      const entry = Object.entries(epub.manifest).find(([, item]) => item.href === hrefNoAnchor || item.href.endsWith(hrefNoAnchor));
+      if (entry) {
+        const [manifestId] = entry;
+        try {
+          html = await epub.getChapterAsync(manifestId);
+        } catch (_) {}
+      }
+    }
+
+    // 3) Если ничего — попробуем через getEpubMetadata и индекс (fallback)
+    if (!html && chapterIndex) {
+      const book = await getEpubMetadata(bookName);
+      if (book && book.chapters && book.chapters[chapterIndex - 1]) {
+        html = book.chapters[chapterIndex - 1].content; // может быть markdown, но хоть что-то
+      }
+    }
+
+    if (!html) {
+      return reply.code(404).send({ error: 'Не удалось получить содержимое главы' });
+    }
+
+    return { html };
+  } catch (error) {
+    console.error('Error getting chapter html:', error);
+    reply.code(500).send({ error: error.message });
+  }
+}); */
+
+// Получить исходный текст главы из epub для читалки (markdown fallback)
+fastify.post('/api/get-chapter-raw', async (request, reply) => {
+  try {
+    const { bookName, chapterIndex } = request.body;
+    
+    if (!bookName || !chapterIndex) {
+      return reply.code(400).send({ error: 'Book name and chapter index are required' });
+    }
+    
+    const book = await getEpubMetadata(bookName);
+    if (!book || !book.chapters || chapterIndex < 1 || chapterIndex > book.chapters.length) {
+      return reply.code(404).send({ error: 'Глава не найдена' });
+    }
+    const chapter = book.chapters[chapterIndex - 1];
+    return { content: chapter.content };
+  } catch (error) {
+    console.error('Error getting chapter raw:', error);
+    reply.code(500).send({ error: error.message });
+  }
+});
+
+// Отдать ресурс из EPUB (картинки, стили)
+fastify.get('/api/epub-asset', async (request, reply) => {
+  try {
+    const bookName = request.query.book;
+    let href = request.query.href;
+    if (!bookName || !href) {
+      return reply.code(400).send({ error: 'book and href are required' });
+    }
+    href = href.replace(/^\/+/, '');
+    const { EPub } = require('epub2');
+    const epub = await EPub.createAsync(`../epub/${bookName}.epub`);
+    const manifestEntry = Object.entries(epub.manifest).find(([id, item]) => item.href === href || item.href.endsWith(href));
+    if (!manifestEntry) return reply.code(404).send({ error: 'Asset not found' });
+    const [id, item] = manifestEntry;
+    let data;
+    try {
+      data = await epub.getFileAsync(id);
+    } catch (e) {
+      return reply.code(404).send({ error: 'Asset read error' });
+    }
+    const ext = (item.href.split('.').pop() || '').toLowerCase();
+    const typeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', svg: 'image/svg+xml', css: 'text/css', html: 'text/html' };
+    const ctype = item['media-type'] || typeMap[ext] || 'application/octet-stream';
+    reply.header('Content-Type', ctype).send(data);
+  } catch (error) {
+    console.error('epub-asset error:', error);
+    reply.code(500).send({ error: error.message });
+  }
+});
+
+// Получить содержимое главы для читалки
+fastify.post('/api/get-chapter-content', async (request, reply) => {
+  try {
+    const { bookName, chapterName } = request.body;
+    const fs = require('fs');
+    
+    if (!bookName || !chapterName) {
+      return reply.code(400).send({ error: 'Book name and chapter name are required' });
+    }
+    
+    const outputDir = path.join('./output', bookName);
+    
+    if (!fs.existsSync(outputDir)) {
+      return reply.code(404).send({ error: 'Папка с главами не найдена' });
+    }
+    
+    // Нормализуем имя главы для поиска файла
+    const normalizedChapterName = chapterName.replace(/\s+/g, '_');
+    
+    // Ищем файл
+    const files = fs.readdirSync(outputDir)
+      .filter(f => (f.endsWith('.txt') || f.endsWith('.md')) && !f.startsWith('_'));
+    
+    const file = files.find(f => {
+      const fileBaseName = f.replace(/\.(txt|md)$/, '').replace(/^\d+\s*-\s*/, '');
+      return fileBaseName.includes(normalizedChapterName) || normalizedChapterName.includes(fileBaseName);
+    });
+    
+    if (!file) {
+      return reply.code(404).send({ error: 'Файл главы не найден' });
+    }
+    
+    const filePath = path.join(outputDir, file);
+    const content = fs.readFileSync(filePath, 'utf8');
+    
+    return { content };
+  } catch (error) {
+    console.error('Error getting chapter content:', error);
+    reply.code(500).send({ error: error.message });
+  }
+});
+
+// Получить саммари всех обработанных глав
+fastify.post('/api/get-summaries', async (request, reply) => {
+  try {
+    const { bookName } = request.body;
+    const fs = require('fs');
+    
+    if (!bookName) {
+      return reply.code(400).send({ error: 'Book name is required' });
+    }
+    
+    const outputDir = path.join('./output', bookName);
+    
+    if (!fs.existsSync(outputDir)) {
+      return reply.code(404).send({ error: 'Папка с главами не найдена' });
+    }
+    
+    // Читаем все файлы
+    const files = fs.readdirSync(outputDir)
+      .filter(f => (f.endsWith('.txt') || f.endsWith('.md')) && !f.startsWith('_'))
+      .sort();
+    
+    const summaries = [];
+    
+    for (const file of files) {
+      const filePath = path.join(outputDir, file);
+      const content = fs.readFileSync(filePath, 'utf8');
+      
+      // Извлекаем название главы и саммари
+      const lines = content.split('\n');
+      let chapterName = file.replace(/\.(txt|md)$/, '');
+      let summary = '';
+      
+      // Ищем название главы (строка начинается с ##)
+      const titleLine = lines.find(line => line.trim().startsWith('## '));
+      if (titleLine) {
+        chapterName = titleLine.replace(/^##\s*/, '').trim();
+      }
+      
+      // Извлекаем саммари (текст между ## и ###)
+      let inSummary = false;
+      for (const line of lines) {
+        if (line.trim().startsWith('## ')) {
+          inSummary = true;
+          continue;
+        }
+        if (line.trim().startsWith('### ')) {
+          break; // Начались карточки
+        }
+        if (inSummary && line.trim()) {
+          summary += line + '\n';
+        }
+      }
+      
+      summaries.push({
+        fileName: file,
+        chapterName,
+        summary: summary.trim()
+      });
+    }
+    
+    return { summaries };
+  } catch (error) {
+    console.error('Error getting summaries:', error);
+    reply.code(500).send({ error: error.message });
+  }
+});
+
 // Health check
 fastify.get('/api/health', async (request, reply) => {
   try {
@@ -213,6 +427,7 @@ fastify.post('/api/book/info', async (request, reply) => {
           realNumber: num,
           displayNumber: displayNum,
           name: chapter.name,
+          href: chapter.href || null,
           contentLength: chapter.content.length,
           exists: exists,
           group: chapter.group || null

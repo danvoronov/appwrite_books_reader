@@ -54,6 +54,8 @@ class BookProcessor {
         const lhInc = document.getElementById('lhInc');
         const lhDec = document.getElementById('lhDec');
         if (fontInc) fontInc.addEventListener('click', () => this.changeReaderFontSize(0.05));
+        const requestTagsBtn = document.getElementById('requestTagsBtn');
+        if (requestTagsBtn) requestTagsBtn.addEventListener('click', () => this.requestTagsForCurrentChapter());
         if (fontDec) fontDec.addEventListener('click', () => this.changeReaderFontSize(-0.05));
         if (lhInc) lhInc.addEventListener('click', () => this.changeReaderLineHeight(0.1));
         if (lhDec) lhDec.addEventListener('click', () => this.changeReaderLineHeight(-0.1));
@@ -497,6 +499,7 @@ class BookProcessor {
         // Переходим к читалке в том же окне
         this.showStep(3);
         this.loadChapterContent(chapter);
+        this.currentChapter = chapter;
     }
     
     async loadChapterContent(chapter) {
@@ -535,6 +538,7 @@ class BookProcessor {
         chapterSelect.onchange = () => {
             const val = parseInt(chapterSelect.value, 10);
             const target = this.bookData.chapters.find(c => c.realNumber === val);
+            this.currentChapter = target;
             if (target) {
                 this.loadChapterContent(target);
             }

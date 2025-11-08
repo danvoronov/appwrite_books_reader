@@ -32,7 +32,6 @@ function findNextVersion(bookDir, baseName) {
 
 function writeChapterOutput(dirName, index, chapterName, json) {
   if (!json || !json.chapter_cards || !json.chapter_cards.length) {
-    console.log(`\n❌ ${chapterName} -- пустые данные. Пробуем еще раз...`)
     return false;
   }
   
@@ -55,14 +54,11 @@ function writeChapterOutput(dirName, index, chapterName, json) {
     const fs = require('fs');
     const oldContent = fs.readFileSync(filePath, 'utf8');
     fs.writeFileSync(versionedFilePath, oldContent);
-    console.log(`\n📦 Старая версия сохранена как: ${baseName}.v${version}.txt`);
     
     // Записываем новую версию в основной файл
     writeFileSync(filePath, content);
-    console.log(`\n✅ ${fileToWrite} -- перезаписан (новая версия)`);
   } else {
     writeFileSync(filePath, content);
-    console.log(`\n✅ ${fileToWrite} -- записан`)
   }
   return true;
 }
@@ -84,7 +80,6 @@ function setDisplayOrder(displayToRealMap) {
     
     // Проверяем что глава существует
     if (!chapter || !chapter.name) {
-      console.warn(`Chapter ${real} not found in bookChapters`);
       continue;
     }
     

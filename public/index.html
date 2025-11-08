@@ -319,6 +319,28 @@
         .reader-side { min-height: 200px; }
         .reader-main img { max-width: 100%; height: auto; }
         .reader-main h1, .reader-main h2, .reader-main h3 { margin-top: 1.4em; }
+        .tag-underline { background: #fffbd1; /* мягкий общий фон для подсветки */ }
+.tag-anchor { background: #f6f6f6; }
+/* Цвета типов (только светлый фон, без подчеркиваний и рамок):
+   def = определения (оранжевый)
+   ex  = истории (голубой)
+   tip = советы (фиолетовый)
+   q   = сомнительное (желтый)
+*/
+.tag-underline.type-def { background: #fff1e0; }
+.tag-underline.type-ex { background: #eef7ff; }
+.tag-underline.type-tip { background: #f6eaff; }
+.tag-underline.type-q { background: #fffbe0; }
+        .tag-comment { color: #8a6d3b; font-style: italic; margin-left: 6px; font-size: 0.9em; }
+        #readerSide { position: relative; }
+.tag-right-item { position: absolute; left: 0; right: 0; font-size: 0.95em; display: flex; align-items: baseline; gap: 6px; }
+.tag-type-chip { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #eee; color: #333; font-size: 0.85em; white-space: nowrap; }
+.tag-type-chip.def { background: #fff1e0; }
+.tag-type-chip.ex  { background: #eef7ff; }
+.tag-type-chip.tip { background: #f6eaff; }
+.tag-type-chip.q   { background: #fffbe0; }
+.tag-type-chip.comment { background: #f6f6f6; }
+.tag-comment-anchor::before { content: '💬'; margin-right: 4px; }
         
         .reader-summary {
             margin: 0 0 9px 0; /* уменьшили нижний отступ в 2 раза */
@@ -950,6 +972,10 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Marked.js для рендеринга Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Модульная структура приложения -->
+    <script type="module" src="app_new.js"></script>
 </body>
 </html>

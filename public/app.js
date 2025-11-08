@@ -1057,7 +1057,7 @@ class BookProcessor {
                 return;
             }
             if (btn) { btn.textContent = 'Разметка...'; btn.disabled = true; }
-            setStatus('Отправляем запрос на разметку...');
+            setStatus('Отправка запроса...');
 
             const response = await fetch('/api/tags/request', {
                 method: 'POST',
@@ -1067,8 +1067,13 @@ class BookProcessor {
                     chapterIndex: this.currentChapter.realNumber
                 })
             });
-            const data = await response.json().catch(() => ({}));
+            setStatus('Получение ответа...');
+            const text = await response.text();
+            setStatus('Парсинг результата...');
+            let data = {};
+            try { data = JSON.parse(text); } catch(parseErr) { throw new Error('Невалидный JSON ответа сервера'); }
             if (!response.ok) throw new Error(data.error || 'Ошибка запроса');
+            setStatus('Сохранение...');
             setStatus(`Готово: сохранено в ${data.filePath}`, '#0a0');
             setTimeout(() => setStatus(''), 5000);
         } catch (e) {

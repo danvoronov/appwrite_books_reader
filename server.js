@@ -321,6 +321,55 @@ fastify.post('/api/get-summaries', async (request, reply) => {
   }
 });
 
+// Tags: request and save JSON
+fastify.post('/api/tags/request', async (request, reply) => {
+  const startTs = Date.now();
+  try {
+    const { bookName, chapterIndex } = request.body || {};
+    fastify.log.info({ bookName, chapterIndex }, 'tags/request: start');
+    if (!bookName || !chapterIndex) {
+      fastify.log.warn('tags/request: missing bookName or chapterIndex');
+      return reply.code(400).send({ error: 'Book name and chapter index are required' });
+    }
+    const { getEpubMetadata } = require('./src/openEpub');
+    const { writeJsonOutput } = require('./src/fileUtils');
+    const { runWithInstructionFile } = require('./src/llmWeb');
+
+    const metaTs = Date.now();
+    const book = await getEpubMetadata(bookName);
+    fastify.log.info({ dt: Date.now()-metaTs }, 'tags/request: got metadata');
+    if (!book || !book.chapters || chapterIndex < 1 || chapterIndex > book.chapters.length) {
+      fastify.log.warn('tags/request: chapter not found');
+      return reply.code(404).send({ error: 'Глава не найдена' });
+    }
+    const chapter = book.chapters[chapterIndex - 1];
+    fastify.log.info({ name: chapter.name, len: (chapter.content||'').length }, 'tags/request: chapter ready');
+
+    // Run LLM with tag system instruction
+    const instructionPath = './data/tag_systemInstruction.txt';
+    const llmStart = Date.now();
+    const data = await runWithInstructionFile(chapter.content, instructionPath, (evt) => {
+      try { fastify.log.info({ evt }, 'tags/request: llm progress'); } catch(_) { console.log('LLM:', evt); }
+    });
+    fastify.log.info({ dt: Date.now()-llmStart }, 'tags/request: llm done');
+
+    // Save JSON
+    const saveStart = Date.now();
+    const filePath = writeJsonOutput(bookName, chapter.name, data, 'tags');
+    fastify.log.info({ dt: Date.now()-saveStart, filePath }, 'tags/request: saved');
+    if (!filePath) {
+      fastify.log.error('tags/request: failed to save');
+      return reply.code(500).send({ error: 'Не удалось сохранить результат' });
+    }
+    const totalDt = Date.now()-startTs;
+    fastify.log.info({ totalDt }, 'tags/request: done');
+    return { success: true, filePath };
+  } catch (error) {
+    try { fastify.log.error(error, 'tags/request: error'); } catch(_) { console.error(error); }
+    reply.code(500).send({ error: error.message });
+  }
+});
+
 // Health check
 fastify.get('/api/health', async (request, reply) => {
   try {

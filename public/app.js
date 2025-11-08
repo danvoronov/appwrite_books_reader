@@ -13,7 +13,6 @@ class BookProcessor {
         
         this.initializeEventListeners();
         this.loadBooks();
-        this.loadSystemInstruction();
         this.handleUrlRouting();
     }
 
@@ -22,27 +21,47 @@ class BookProcessor {
     }
 
     initializeEventListeners() {
+        // Инициализация настроек читалки
+        try {
+            const savedFs = localStorage.getItem('readerFontSize');
+            const savedLh = localStorage.getItem('readerLineHeight');
+            this.readerFontSize = savedFs ? parseFloat(savedFs) : 1.1; // rem
+            this.readerLineHeight = savedLh ? parseFloat(savedLh) : 1.8;
+        } catch (_) {
+            this.readerFontSize = 1.1;
+            this.readerLineHeight = 1.8;
+        }
         // Кнопки навигации
         document.getElementById('processBtn').addEventListener('click', () => this.prepareForProcessing());
-        document.getElementById('startProcessingBtn').addEventListener('click', () => this.startProcessing());
         document.getElementById('stopProcessingBtn').addEventListener('click', () => this.stopProcessing());
         document.getElementById('backToBooks').addEventListener('click', () => this.backToBooks());
-        document.getElementById('backToChapters').addEventListener('click', () => this.showStep(2));
-        document.getElementById('startNewProcess').addEventListener('click', () => this.showStep(2));
+        document.getElementById('closeModal').addEventListener('click', () => this.closeProcessingModal());
+        
+        // Кнопка назад из читалки
+        const backFromReaderBtn = document.getElementById('backToChaptersFromReader');
+        if (backFromReaderBtn) {
+            backFromReaderBtn.addEventListener('click', () => {
+                const params = new URLSearchParams(window.location.search);
+                params.delete('chapter');
+                window.history.pushState({}, '', '?' + params.toString());
+                this.showStep(2);
+            });
+        }
+        
+        // Контролы типографики читалки
+        const fontInc = document.getElementById('fontInc');
+        const fontDec = document.getElementById('fontDec');
+        const lhInc = document.getElementById('lhInc');
+        const lhDec = document.getElementById('lhDec');
+        if (fontInc) fontInc.addEventListener('click', () => this.changeReaderFontSize(0.05));
+        if (fontDec) fontDec.addEventListener('click', () => this.changeReaderFontSize(-0.05));
+        if (lhInc) lhInc.addEventListener('click', () => this.changeReaderLineHeight(0.1));
+        if (lhDec) lhDec.addEventListener('click', () => this.changeReaderLineHeight(-0.1));
 
         // Кнопки выбора глав
         document.getElementById('selectAllBtn').addEventListener('click', () => this.selectAllChapters());
         document.getElementById('selectProcessedBtn').addEventListener('click', () => this.selectProcessedChapters());
         document.getElementById('deselectAllBtn').addEventListener('click', () => this.deselectAllChapters());
-
-        // Кнопки системной инструкции
-        document.getElementById('editSystemInstruction').addEventListener('click', () => this.editSystemInstruction());
-        document.getElementById('resetSystemInstruction').addEventListener('click', () => this.resetSystemInstruction());
-        document.getElementById('saveSystemInstruction').addEventListener('click', () => this.saveSystemInstruction());
-        document.getElementById('cancelEditSystemInstruction').addEventListener('click', () => this.cancelEditSystemInstruction());
-        
-        // Кнопка открытия файла
-        document.getElementById('openFileBtn').addEventListener('click', () => this.openCurrentFile());
     }
 
     showStep(stepNumber) {
@@ -51,6 +70,26 @@ class BookProcessor {
         
         // Показываем нужный шаг
         document.getElementById(`step${stepNumber}`).classList.add('active');
+        
+        // Обновляем URL (только для шагов 1 и 2)
+        const params = new URLSearchParams(window.location.search);
+        if (stepNumber === 1) {
+            // Шаг 1 - главная страница
+            window.history.pushState({}, '', '/');
+        } else if (stepNumber === 2 && this.selectedBook) {
+            // Шаг 2 - выбор глав
+            params.set('book', this.selectedBook);
+            params.delete('chapter'); // Убираем параметр chapter если возвращаемся к списку
+            // Если есть выбранные главы, добавляем их в URL
+            if (this.selectedChapters.size > 0) {
+                const chaptersArray = Array.from(this.selectedChapters).sort((a, b) => a - b);
+                params.set('chapters', chaptersArray.join(','));
+            } else {
+                params.delete('chapters');
+            }
+            window.history.pushState({}, '', '?' + params.toString());
+        }
+        // Шаг 3 обновляет URL в loadChapterContent
     }
 
     backToBooks() {
@@ -162,13 +201,46 @@ class BookProcessor {
     handleUrlRouting() {
         const urlParams = new URLSearchParams(window.location.search);
         const bookFromUrl = urlParams.get('book');
+        const chaptersFromUrl = urlParams.get('chapters');
+        const chapterParam = urlParams.get('chapter');
         
         if (bookFromUrl) {
+            // Применим типографику на всякий случай
+            setTimeout(() => this.applyReaderTypography(), 0);
             // Ждем загрузки книг, затем открываем нужную
             const checkBooksLoaded = () => {
                 if (this.booksLoaded) {
                     const decodedBookName = decodeURIComponent(bookFromUrl);
-                    this.openBookDirectly(decodedBookName);
+                    this.openBookDirectly(decodedBookName).then(() => {
+                        // Восстанавливаем выбранные главы из URL
+                        if (chaptersFromUrl) {
+                            const chapterNums = chaptersFromUrl.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+                            this.selectedChapters.clear();
+                            chapterNums.forEach(num => this.selectedChapters.add(num));
+                            
+                            // Обновляем визуальное выделение
+                            setTimeout(() => {
+                                document.querySelectorAll('.chapter-item').forEach(item => {
+                                    const chapterNum = parseInt(item.dataset.chapter);
+                                    if (this.selectedChapters.has(chapterNum)) {
+                                        item.classList.add('selected');
+                                    }
+                                });
+                                this.updateProcessButton();
+                            }, 200);
+                        }
+                        
+                        // Если указан параметр chapter — сразу открыть читалку
+                        if (chapterParam) {
+                            const chNum = parseInt(chapterParam);
+                            if (!isNaN(chNum)) {
+                                const chapter = this.bookData.chapters.find(c => c.displayNumber === chNum || c.realNumber === chNum);
+                                if (chapter) {
+                                    this.openChapterReader(chapter);
+                                }
+                            }
+                        }
+                    });
                 } else {
                     setTimeout(checkBooksLoaded, 100);
                 }
@@ -178,15 +250,8 @@ class BookProcessor {
 
         // Обработчик кнопки "Назад" браузера
         window.addEventListener('popstate', (event) => {
-            if (event.state && event.state.book) {
-                this.openBookDirectly(event.state.book);
-            } else {
-                // Возвращаемся к списку книг
-                this.showStep(1);
-                const url = new URL(window.location);
-                url.searchParams.delete('book');
-                window.history.replaceState({}, '', url);
-            }
+            // Перезагружаем страницу для корректной обработки URL
+            window.location.reload();
         });
     }
 
@@ -231,7 +296,27 @@ class BookProcessor {
     renderBookInfo() {
         const container = document.getElementById('bookInfo');
         const processedCount = this.bookData.chapters.filter(ch => ch.exists).length;
-        container.innerHTML = `<strong>📚 ${this.bookData.book.title}</strong> <span class="book-stats">• Всего: ${this.bookData.book.chaptersCount} глав • Доступно: ${this.bookData.chapters.length} • Уже обработано: ${processedCount}</span>`;
+        const hasProcessed = processedCount > 0;
+        
+        container.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="flex: 1;">
+                    <strong>📚 ${this.bookData.book.title}</strong> 
+                    <span class="book-stats">• Всего: ${this.bookData.book.chaptersCount} глав • Доступно: ${this.bookData.chapters.length} • Уже обработано: ${processedCount}</span>
+                </div>
+                ${hasProcessed ? '<button class="btn btn-secondary" id="downloadSummaryBtn" style="padding: 6px 12px; font-size: 0.85rem;">📥 Скачать саммари</button>' : ''}
+            </div>
+        `;
+        
+        // Добавляем обработчик для кнопки скачивания
+        if (hasProcessed) {
+            setTimeout(() => {
+                const btn = document.getElementById('downloadSummaryBtn');
+                if (btn) {
+                    btn.addEventListener('click', () => this.downloadSummary());
+                }
+            }, 0);
+        }
     }
 
     renderChapterList(chaptersList) {
@@ -255,6 +340,7 @@ class BookProcessor {
                         <span class="chapter-exists">${existsEmoji}</span>
                         <span class="chapter-name">${chapter.name}</span>
                         <span class="chapter-size">${warningSymbol}${sizeInfo}</span>
+                        <button class="chapter-process-btn" data-chapter="${chapter.realNumber}" title="Читать главу">📖</button>
                     </div>
                 </div>
             `;
@@ -341,6 +427,7 @@ class BookProcessor {
                             <span class="chapter-exists">${existsEmoji}</span>
                             <span class="chapter-name">${chapter.name}</span>
                             <span class="chapter-size">${warningSymbol}${sizeInfo}</span>
+                            <button class="chapter-process-btn" data-chapter="${chapter.realNumber}" title="Читать главу">📖</button>
                         </div>
                     </div>
                 `;
@@ -360,13 +447,170 @@ class BookProcessor {
         html += '</div>';
         container.innerHTML = html;
 
-        // Добавляем обработчики кликов
+        // Добавляем обработчики кликов на главы
         container.querySelectorAll('.chapter-item').forEach(item => {
-            item.addEventListener('click', () => this.toggleChapter(item));
+            item.addEventListener('click', (e) => {
+                // Не обрабатываем клик если нажали на кнопку процесса
+                if (e.target.classList.contains('chapter-process-btn')) {
+                    return;
+                }
+                this.toggleChapter(item);
+            });
+        });
+        
+        // Добавляем обработчики на кнопки просмотра главы
+        container.querySelectorAll('.chapter-process-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const chapterNum = parseInt(btn.dataset.chapter);
+                const chapter = this.bookData.chapters.find(c => c.realNumber === chapterNum);
+                if (chapter) {
+                    this.openChapterReader(chapter);
+                }
+            });
         });
 
         this.selectedChapters.clear();
         this.updateProcessButton();
+    }
+    
+    processOneChapter(chapterNum) {
+        // Выбираем только эту главу
+        this.selectedChapters.clear();
+        this.selectedChapters.add(chapterNum);
+        
+        // Обновляем визуальное выделение
+        document.querySelectorAll('.chapter-item').forEach(item => {
+            const itemChapterNum = parseInt(item.dataset.chapter);
+            if (itemChapterNum === chapterNum) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+        
+        // Сразу переходим к обработке
+        this.prepareForProcessing();
+    }
+    
+    openChapterReader(chapter) {
+        // Переходим к читалке в том же окне
+        this.showStep(3);
+        this.loadChapterContent(chapter);
+    }
+    
+    async loadChapterContent(chapter) {
+        const buildSummaryHtml = (summary) => {
+            if (!summary) return '';
+            const safe = window.marked ? window.marked.parse(summary) : summary.replace(/</g,'&lt;').replace(/\n/g,'<br>');
+            return `
+                <div class=\"reader-summary\">
+                    <div class=\"reader-summary-body\">${safe}</div>
+                </div>
+            `;
+        };
+        const container = document.getElementById('readerMain');
+        const summaryEl = document.getElementById('readerSummary');
+        const metaEl = document.getElementById('readerMeta');
+        const chapterSelect = document.getElementById('readerChapterSelect');
+        const bookTitleSmall = document.getElementById('readerBookTitleSmall');
+        if (!chapterSelect || !bookTitleSmall) {
+            return;
+        }
+        // Устанавливаем название книги (серым)
+        bookTitleSmall.textContent = `— ${this.bookData.book.title}`;
+        // Наполняем select списком глав, если пустой или длина не совпадает
+        if (chapterSelect.options.length !== this.bookData.chapters.length) {
+            chapterSelect.innerHTML = '';
+            this.bookData.chapters.forEach((ch) => {
+                const opt = document.createElement('option');
+                opt.value = String(ch.realNumber);
+                opt.textContent = `[${ch.displayNumber}] ${ch.name}`;
+                chapterSelect.appendChild(opt);
+            });
+        }
+        // Выбираем текущую главу
+        chapterSelect.value = String(chapter.realNumber);
+        // Обработчик смены главы
+        chapterSelect.onchange = () => {
+            const val = parseInt(chapterSelect.value, 10);
+            const target = this.bookData.chapters.find(c => c.realNumber === val);
+            if (target) {
+                this.loadChapterContent(target);
+            }
+        };
+        // Показываем состояния загрузки сразу, чтобы не оставался старый контент
+        container.innerHTML = '<div class="loading">⏳ Загружаем текст главы...</div>';
+        if (summaryEl) {
+            summaryEl.innerHTML = '<div class="reader-summary"><div class="reader-summary-body">Загрузка...</div></div>';
+            summaryEl.style.display = '';
+        }
+        if (metaEl) {
+            metaEl.textContent = 'Загрузка...';
+            metaEl.style.display = '';
+        }
+        
+        // Обновляем URL
+        const params = new URLSearchParams(window.location.search);
+        params.set('book', this.selectedBook);
+        params.set('chapter', chapter.displayNumber);
+        window.history.pushState({}, '', '?' + params.toString());
+        
+        try {
+            // 1) Пытаемся получить саммари из обработанного файла (если есть)
+            let summaryHtml = '';
+            try {
+                const sumResp = await fetch('/api/get-chapter-content', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookName: this.selectedBook, chapterName: chapter.name })
+                });
+                if (sumResp.ok) {
+                    const sumData = await sumResp.json(); // { content }
+                    const summary = this.extractSummaryFromProcessed(sumData.content);
+                    if (summary && summary.trim().length > 0) {
+                        summaryHtml = buildSummaryHtml(summary.trim());
+                    }
+                }
+            } catch (e) { /* ignore */ }
+
+            const response = await fetch('/api/get-chapter-raw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    bookName: this.selectedBook,
+                    chapterIndex: chapter.realNumber
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Ошибка загрузки главы');
+            let html = (window.marked ? window.marked.parse(data.content) : data.content);
+            html = this.rewriteEpubUrls(html, this.selectedBook);
+            if (summaryEl) {
+                if (summaryHtml) {
+                    summaryEl.innerHTML = summaryHtml;
+                    summaryEl.style.display = '';
+                } else {
+                    summaryEl.innerHTML = '';
+                    summaryEl.style.display = 'none';
+                }
+            }
+            // Инфо-строка под саммари
+            if (metaEl) {
+                const formatNumber = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+                const chars = data.content ? data.content.length : 0;
+                const approxTokens = Math.max(1, Math.round(chars / 4));
+                const tokensK = Math.max(1, Math.round(approxTokens / 1000));
+                metaEl.textContent = `Длина текста: ${formatNumber(chars)} символов, ${tokensK}к токенов`;
+                metaEl.style.display = '';
+            }
+            container.innerHTML = html;
+            // Применяем типографику читалки после вставки
+            this.applyReaderTypography();
+            
+        } catch (error) {
+            container.innerHTML = `<div class="error">❌ Ошибка загрузки: ${error.message}</div>`;
+        }
     }
 
     formatSize(bytes) {
@@ -388,16 +632,32 @@ class BookProcessor {
         }
         
         this.updateProcessButton();
+        this.updateUrlWithChapters();
     }
 
     selectAllChapters() {
-        this.selectedChapters.clear();
-        document.querySelectorAll('.chapter-item').forEach(item => {
-            const chapterNum = parseInt(item.dataset.chapter);
-            this.selectedChapters.add(chapterNum);
-            item.classList.add('selected');
-        });
+        const allItems = document.querySelectorAll('.chapter-item');
+        const totalCount = allItems.length;
+        const selectedCount = this.selectedChapters.size;
+        
+        // Если все выбраны - снимаем выбор, иначе - выбираем все
+        if (selectedCount === totalCount) {
+            // Снять все
+            this.selectedChapters.clear();
+            allItems.forEach(item => {
+                item.classList.remove('selected');
+            });
+        } else {
+            // Выбрать все
+            this.selectedChapters.clear();
+            allItems.forEach(item => {
+                const chapterNum = parseInt(item.dataset.chapter);
+                this.selectedChapters.add(chapterNum);
+                item.classList.add('selected');
+            });
+        }
         this.updateProcessButton();
+        this.updateUrlWithChapters();
     }
 
     deselectAllChapters() {
@@ -406,21 +666,62 @@ class BookProcessor {
             item.classList.remove('selected');
         });
         this.updateProcessButton();
+        this.updateUrlWithChapters();
     }
 
     selectProcessedChapters() {
+        // Проверяем, выбраны ли сейчас обработанные главы
+        const processedItems = Array.from(document.querySelectorAll('.chapter-item.exists'));
+        const unprocessedItems = Array.from(document.querySelectorAll('.chapter-item:not(.exists)'));
+        
+        const processedSelected = processedItems.some(item => {
+            const chapterNum = parseInt(item.dataset.chapter);
+            return this.selectedChapters.has(chapterNum);
+        });
+        
         this.selectedChapters.clear();
-        document.querySelectorAll('.chapter-item').forEach(item => {
-            // Проверяем, есть ли класс 'exists' (обработанная глава)
-            if (item.classList.contains('exists')) {
+        
+        if (processedSelected) {
+            // Переключаемся на необработанные
+            unprocessedItems.forEach(item => {
                 const chapterNum = parseInt(item.dataset.chapter);
                 this.selectedChapters.add(chapterNum);
                 item.classList.add('selected');
-            } else {
+            });
+            processedItems.forEach(item => {
                 item.classList.remove('selected');
-            }
-        });
+            });
+        } else {
+            // Выбираем обработанные
+            processedItems.forEach(item => {
+                const chapterNum = parseInt(item.dataset.chapter);
+                this.selectedChapters.add(chapterNum);
+                item.classList.add('selected');
+            });
+            unprocessedItems.forEach(item => {
+                item.classList.remove('selected');
+            });
+        }
+        
         this.updateProcessButton();
+        this.updateUrlWithChapters();
+    }
+    
+    updateUrlWithChapters() {
+        if (!this.selectedBook) return;
+        
+        const params = new URLSearchParams(window.location.search);
+        params.set('book', this.selectedBook);
+        params.delete('processing');
+        
+        if (this.selectedChapters.size > 0) {
+            const chaptersArray = Array.from(this.selectedChapters).sort((a, b) => a - b);
+            params.set('chapters', chaptersArray.join(','));
+        } else {
+            params.delete('chapters');
+        }
+        
+        window.history.replaceState({}, '', '?' + params.toString());
     }
 
     updateProcessButton() {
@@ -435,24 +736,29 @@ class BookProcessor {
     }
 
     prepareForProcessing() {
-        if (this.selectedChapters.size === 0) return;
+        if (this.selectedChapters.size === 0) {
+            alert('Выберите хотя бы одну главу для обработки');
+            return;
+        }
 
-        this.showStep(3);
+        // Открываем модальное окно вместо перехода на шаг 3
+        this.openProcessingModal();
+    }
+    
+    openProcessingModal() {
+        const modal = document.getElementById('processingModal');
+        modal.style.display = 'block';
+        
         this.clearProgressLog();
-        this.clearResults();
-        this.hideProgressBar();
         
         // Инициализируем счетчики
         this.totalChapters = this.selectedChapters.size;
         this.processedChapters = 0;
         this.currentChapterProgress = 0;
         
-        // Активируем кнопку запуска
-        document.getElementById('startProcessingBtn').disabled = false;
-        document.getElementById('stopProcessingBtn').disabled = true;
+        document.getElementById('stopProcessingBtn').disabled = false;
         
-        this.addToProgressLog(`📋 Готово к обработке ${this.selectedChapters.size} глав`);
-        this.addToProgressLog('💡 Нажмите "Запустить обработку" для начала');
+        this.addToProgressLog(`📋 Начинаем обработку ${this.selectedChapters.size} глав`);
         
         // Показываем выбранные главы
         const chaptersArray = Array.from(this.selectedChapters);
@@ -462,20 +768,28 @@ class BookProcessor {
                 this.addToProgressLog(`   • Глава ${chapter.displayNumber}: ${chapter.name}`);
             }
         });
+        
+        // Автоматически начинаем обработку
+        setTimeout(() => this.startProcessing(), 500);
+    }
+    
+    closeProcessingModal() {
+        const modal = document.getElementById('processingModal');
+        modal.style.display = 'none';
+        
+        // Останавливаем обработку если она идёт
+        if (this.processingActive) {
+            this.stopProcessing();
+        }
     }
 
     async startProcessing() {
         if (this.selectedChapters.size === 0) return;
 
-        // Блокируем кнопки
-        document.getElementById('startProcessingBtn').disabled = true;
-        document.getElementById('stopProcessingBtn').disabled = false;
         this.processingActive = true;
+        document.getElementById('stopProcessingBtn').disabled = false;
 
-        // Показываем прогресс-бар
-        this.showProgressBar();
         this.updateProgressBar(0, 'Начинаем обработку...', '', '');
-
         this.addToProgressLog('🚀 Запускаем обработку...');
         
         // Устанавливаем WebSocket соединение
@@ -517,14 +831,11 @@ class BookProcessor {
             // Финальное обновление прогресс-бара
             this.updateProgressBar(100, 'Обработка завершена!', 
                 `Готово: ${successCount}/${this.totalChapters} глав`, 'Завершено');
-
-            document.getElementById('startNewProcess').disabled = false;
             
         } catch (error) {
             this.addToProgressLog(`❌ Ошибка: ${error.message}`);
         } finally {
             this.processingActive = false;
-            document.getElementById('startProcessingBtn').disabled = false;
             document.getElementById('stopProcessingBtn').disabled = true;
             
             if (this.ws) {
@@ -544,7 +855,6 @@ class BookProcessor {
         this.updateProgressBar(progress, 'Обработка остановлена', 
             `Остановлено на ${this.processedChapters}/${this.totalChapters}`, 'Прервано');
         
-        document.getElementById('startProcessingBtn').disabled = false;
         document.getElementById('stopProcessingBtn').disabled = true;
         this.addToProgressLog('⏹️ Обработка остановлена пользователем');
     }
@@ -603,8 +913,8 @@ class BookProcessor {
                 
                 // НЕ отображаем результат здесь - ждем chapter_result
             } else if (data.type === 'chapter_result') {
-                // Отображаем результат главы (основной способ)
-                this.showChapterResult(data.chapterNumber, data.chapterName, data.data);
+                // Результаты больше не отображаем в модальном окне, только в логе
+                this.addToProgressLog(`✅ Глава ${data.chapterNumber} (${data.chapterName}) обработана успешно`);
             }
         };
 
@@ -657,208 +967,143 @@ class BookProcessor {
         container.innerHTML = `<div class="error">❌ ${message}</div>`;
     }
 
-    // Методы для работы с системной инструкцией
-    async loadSystemInstruction() {
-        try {
-            const response = await fetch('/api/system-instruction');
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.error || 'Ошибка загрузки системной инструкции');
-            }
 
-            this.originalSystemInstruction = data.systemInstruction;
-            this.displaySystemInstruction(data.systemInstruction);
-        } catch (error) {
-            console.error('Ошибка загрузки системной инструкции:', error);
-            document.getElementById('systemInstructionViewer').innerHTML = 
-                `<div class="error">Ошибка загрузки: ${error.message}</div>`;
-        }
-    }
-
-    displaySystemInstruction(instruction) {
-        const viewer = document.getElementById('systemInstructionViewer');
-        // Показываем первые 200 символов + сокращение
-        const preview = instruction.length > 200 ? 
-            instruction.substring(0, 200) + '\n\n... (показано 200 из ' + instruction.length + ' символов) ...' : 
-            instruction;
-        viewer.textContent = preview;
-    }
-
-    editSystemInstruction() {
-        const viewer = document.getElementById('systemInstructionViewer');
-        const editor = document.getElementById('systemInstructionEditor');
-        const controls = document.querySelector('.system-instruction-editor-controls');
-        
-        editor.value = this.originalSystemInstruction;
-        
-        viewer.style.display = 'none';
-        editor.style.display = 'block';
-        controls.style.display = 'flex';
-    }
-
-    cancelEditSystemInstruction() {
-        const viewer = document.getElementById('systemInstructionViewer');
-        const editor = document.getElementById('systemInstructionEditor');
-        const controls = document.querySelector('.system-instruction-editor-controls');
-        
-        viewer.style.display = 'block';
-        editor.style.display = 'none';
-        controls.style.display = 'none';
-    }
-
-    async saveSystemInstruction() {
-        const editor = document.getElementById('systemInstructionEditor');
-        const newInstruction = editor.value;
-        
-        if (!newInstruction.trim()) {
-            alert('Системная инструкция не может быть пустой');
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/system-instruction', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ systemInstruction: newInstruction })
-            });
-
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.error || 'Ошибка сохранения');
-            }
-
-            this.originalSystemInstruction = newInstruction;
-            this.displaySystemInstruction(newInstruction);
-            this.cancelEditSystemInstruction();
-            
-            this.addToProgressLog(`✅ Системная инструкция сохранена (резервная копия: ${data.backupFile})`);
-        } catch (error) {
-            alert(`Ошибка сохранения: ${error.message}`);
-        }
-    }
-
-    async resetSystemInstruction() {
-        if (!confirm('Вы уверены, что хотите перезагрузить системную инструкцию из файла?')) {
-            return;
-        }
-
-        await this.loadSystemInstruction();
-        this.addToProgressLog('🔄 Системная инструкция перезагружена из файла');
-    }
-
-    // Методы для отображения результатов
-    showChapterResult(chapterNumber, chapterName, data) {
-        const container = document.getElementById('resultContainer');
-        
-        // Удаляем placeholder если есть
-        const placeholder = container.querySelector('.result-placeholder');
-        if (placeholder) {
-            placeholder.remove();
-        }
-
-        const resultHtml = this.generateChapterResultHtml(chapterNumber, chapterName, data);
-        container.insertAdjacentHTML('beforeend', resultHtml);
-        
-        // Прокручиваем к новому результату
-        const newResult = container.lastElementChild;
-        newResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        
-        // Сохраняем информацию о последнем обработанном файле и показываем кнопку
-        this.lastProcessedChapter = { chapterNumber, chapterName };
-        document.getElementById('openFileBtn').style.display = 'inline-block';
-    }
     
-    async openCurrentFile() {
-        if (!this.lastProcessedChapter || !this.selectedBook) {
-            alert('Нет обработанных файлов для открытия');
-            return;
+    
+    rewriteEpubUrls(html, bookName) {
+        try {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = html;
+            // Картинки
+            wrapper.querySelectorAll('img').forEach(img => {
+                const src = img.getAttribute('src');
+                if (!src) return;
+                const clean = src.replace(/^\/+/, '');
+                img.setAttribute('src', `/api/epub-asset?book=${encodeURIComponent(bookName)}&href=${encodeURIComponent(clean)}`);
+                img.style.maxWidth = '100%';
+                img.style.height = 'auto';
+            });
+            // Ссылки
+            wrapper.querySelectorAll('a').forEach(a => {
+                const href = a.getAttribute('href');
+                if (!href) return;
+                const clean = href.replace(/^\/+/, '');
+                a.setAttribute('href', `/api/epub-asset?book=${encodeURIComponent(bookName)}&href=${encodeURIComponent(clean)}`);
+                a.setAttribute('target', '_blank');
+                a.setAttribute('rel', 'noopener noreferrer');
+            });
+            return wrapper.innerHTML;
+        } catch (e) {
+            return html;
         }
+    }
+
+    extractSummaryFromProcessed(fileContent) {
+        try {
+            const lines = fileContent.split(/\r?\n/);
+            let inSummary = false;
+            const out = [];
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim().startsWith('## ')) {
+                    // Заголовок главы — после него начинается summary
+                    inSummary = true;
+                    continue;
+                }
+                if (line.trim().startsWith('### ')) {
+                    // Начались карточки — summary закончилось
+                    break;
+                }
+                if (inSummary) out.push(line);
+            }
+            return out.join('\n').trim();
+        } catch (e) { return ''; }
+    }
+
+    applyReaderTypography() {
+        const main = document.getElementById('readerMain');
+        if (main) {
+            main.style.fontSize = `${this.readerFontSize}rem`;
+            main.style.lineHeight = String(this.readerLineHeight);
+        }
+    }
+
+    changeReaderFontSize(delta) {
+        const minFs = 0.8, maxFs = 1.6;
+        this.readerFontSize = Math.min(maxFs, Math.max(minFs, (this.readerFontSize || 1.1) + delta));
+        this.applyReaderTypography();
+        try { localStorage.setItem('readerFontSize', String(this.readerFontSize)); } catch(_) {}
+    }
+
+    changeReaderLineHeight(delta) {
+        const minLh = 1.2, maxLh = 2.2;
+        this.readerLineHeight = Math.min(maxLh, Math.max(minLh, (this.readerLineHeight || 1.8) + delta));
+        this.applyReaderTypography();
+        try { localStorage.setItem('readerLineHeight', String(this.readerLineHeight)); } catch(_) {}
+    }
+
+    async downloadSummary() {
+        if (!this.selectedBook || !this.bookData) return;
         
         try {
-            const response = await fetch('/api/open-file', {
+            // Запрашиваем саммари с сервера
+            const response = await fetch('/api/get-summaries', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    bookName: this.selectedBook,
-                    chapterName: this.lastProcessedChapter.chapterName
-                })
+                body: JSON.stringify({ bookName: this.selectedBook })
             });
             
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.error || 'Ошибка открытия файла');
+                throw new Error(data.error || 'Ошибка получения саммари');
             }
             
-            this.addToProgressLog(`📂 Файл открыт: ${data.filePath}`);
-        } catch (error) {
-            alert(`Ошибка открытия файла: ${error.message}`);
-            this.addToProgressLog(`❌ Ошибка открытия файла: ${error.message}`);
-        }
-    }
-
-    generateChapterResultHtml(chapterNumber, chapterName, data) {
-        let cardsHtml = '';
-        
-        if (data.chapter_cards && data.chapter_cards.length > 0) {
-            data.chapter_cards.forEach(theme => {
-                let cardsListHtml = '';
-                theme.cards.forEach(card => {
-                    const [question, answer] = card.split(' >> ');
-                    cardsListHtml += `
-                        <div class="flashcard">
-                            <div class="flashcard-question">${question}</div>
-                            <div class="flashcard-answer">${answer}</div>
-                        </div>
-                    `;
-                });
-
-                cardsHtml += `
-                    <div class="card-theme">
-                        <div class="card-theme-header">${theme.topic}</div>
-                        <div class="card-list">${cardsListHtml}</div>
-                    </div>
-                `;
+            // Сортируем саммари по порядку глав в TOC
+            const sortedSummaries = [];
+            
+            // Проходим по главам в правильном порядке
+            this.bookData.chapters.forEach(chapter => {
+                if (chapter.exists) {
+                    // Нормализуем имя главы для поиска
+                    const normalizedChapterName = chapter.name.replace(/\s+/g, '_');
+                    
+                    // Ищем соответствующее саммари
+                    const summary = data.summaries.find(s => {
+                        const normalizedSummaryName = s.fileName.replace(/\.(txt|md)$/, '').replace(/^\d+\s*-\s*/, '');
+                        return normalizedSummaryName.includes(normalizedChapterName) || 
+                               normalizedChapterName.includes(normalizedSummaryName) ||
+                               s.chapterName === chapter.name;
+                    });
+                    
+                    if (summary) {
+                        sortedSummaries.push(summary);
+                    }
+                }
             });
+            
+            // Создаем markdown файл
+            const markdown = sortedSummaries.map(s => `## ${s.chapterName}\n${s.summary}\n`).join('\n');
+            
+            // Создаем blob и скачиваем
+            const blob = new Blob([markdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${this.selectedBook}_summary.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            console.log('✅ Саммари скачано');
+        } catch (error) {
+            alert(`Ошибка скачивания саммари: ${error.message}`);
+            console.error('Error downloading summary:', error);
         }
-
-        return `
-            <div class="chapter-result">
-                <div class="chapter-result-header">
-                    Глава ${chapterNumber}: ${chapterName}
-                </div>
-                <div class="chapter-result-content">
-                    <div class="chapter-summary">
-                        <strong>Краткое содержание:</strong><br>
-                        ${data.chapter_summary || 'Краткое содержание не создано'}
-                    </div>
-                    <div class="chapter-cards">
-                        ${cardsHtml}
-                    </div>
-                </div>
-            </div>
-        `;
     }
 
-    clearResults() {
-        const container = document.getElementById('resultContainer');
-        container.innerHTML = `
-            <div class="result-placeholder">
-                Здесь будут отображаться результаты обработки глав...
-            </div>
-        `;
-    }
 
-    // Методы для управления прогресс-баром
-    showProgressBar() {
-        document.getElementById('progressBarContainer').style.display = 'block';
-    }
-
-    hideProgressBar() {
-        document.getElementById('progressBarContainer').style.display = 'none';
-    }
 
     updateProgressBar(progress, text, chapterInfo = '', chapterProgress = '') {
         const progressFill = document.getElementById('progressBarFill');

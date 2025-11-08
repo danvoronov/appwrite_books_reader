@@ -540,6 +540,7 @@ class BookProcessor {
             const target = this.bookData.chapters.find(c => c.realNumber === val);
             this.currentChapter = target;
             if (target) {
+                this.currentChapter = target;
                 this.loadChapterContent(target);
             }
         };
@@ -1162,6 +1163,39 @@ class BookProcessor {
         }
     }
 }
+
+    async requestTagsForCurrentChapter() {
+        const status = document.getElementById('requestTagsStatus');
+        const btn = document.getElementById('requestTagsBtn');
+        const setStatus = (msg, color = '#666') => { if (status) { status.textContent = msg; status.style.color = color; } };
+        try {
+            if (!this.selectedBook || !this.currentChapter) {
+                setStatus('Нет выбранной главы', '#c00');
+                return;
+            }
+            const prevText = btn ? btn.textContent : '';
+            if (btn) { btn.textContent = 'Разметка...'; btn.disabled = true; }
+            setStatus('Отправляем запрос на разметку...');
+
+            const response = await fetch('/api/tags/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bookName: this.selectedBook,
+                    chapterIndex: this.currentChapter.realNumber
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'Ошибка запроса');
+            setStatus(`Готово: сохранено в ${data.filePath}`, '#0a0');
+            // Автоочистка статуса через 5 секунд
+            setTimeout(() => setStatus(''), 5000);
+        } catch (e) {
+            setStatus(`Ошибка: ${e.message}`, '#c00');
+        } finally {
+            if (btn) { btn.textContent = 'Разметить'; btn.disabled = false; }
+        }
+    }
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {

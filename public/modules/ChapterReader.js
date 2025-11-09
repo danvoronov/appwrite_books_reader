@@ -47,8 +47,12 @@ export class ChapterReader {
         const metaEl = document.getElementById('readerMeta');
         const chapterSelect = document.getElementById('readerChapterSelect');
         const bookTitleSmall = document.getElementById('readerBookTitleSmall');
+        const sideEl = document.getElementById('readerSide');
         
         if (!chapterSelect || !bookTitleSmall) return;
+
+        // Сразу очищаем правую колонку
+        if (sideEl) sideEl.innerHTML = '';
 
         bookTitleSmall.textContent = `— ${this.bp.bookData.book.title}`;
         this.populateChapterSelect(chapterSelect, chapter);
@@ -464,7 +468,7 @@ export class ChapterReader {
             const text = safe(c.t || 'Комментарий');
             items.push({
                 order: c._pos ?? 0,
-                html: `<div class="tag-right-item" data-anchor="${c.anchorId}">${text}</div>`
+                html: `<div class="tag-right-item quote" data-anchor="${c.anchorId}">${text}</div>`
             });
         });
         
@@ -533,40 +537,114 @@ export class ChapterReader {
         }
     }
 
+    showToast(message, isError = false) {
+        const toast = document.createElement('div');
+        toast.className = 'toast' + (isError ? ' error' : '');
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    loadNextChapter() {
+        if (!this.bp.bookData || !this.bp.currentChapter) return;
+        
+        const chapters = this.bp.bookData.chapters;
+        const currentIndex = chapters.findIndex(ch => ch.realNumber === this.bp.currentChapter.realNumber);
+        
+        if (currentIndex === -1 || currentIndex >= chapters.length - 1) {
+            this.showToast('Это последняя глава', true);
+            return;
+        }
+        
+        const nextChapter = chapters[currentIndex + 1];
+        this.loadChapterContent(nextChapter);
+        this.bp.currentChapter = nextChapter;
+        
+        // Обновляем URL
+        const params = new URLSearchParams(window.location.search);
+        params.set('chapter', nextChapter.realNumber);
+        window.history.pushState({}, '', '?' + params.toString());
+    }
+
     async requestTagsForCurrentChapter() {
+        const btn = document.getElementById('requestTagsBtn');
+        
         if (!this.bp.currentChapter) {
-            alert('Нет активной главы');
+            this.showToast('Нет активной главы', true);
             return;
         }
         
         const chapter = this.bp.currentChapter;
-        const confirmed = confirm(
-            `Запросить обработку тегов для главы "${chapter.name}"?\n\n` +
-            `Это может занять несколько минут.`
-        );
         
-        if (!confirmed) return;
+        // Проверяем состояние подтверждения
+        if (!this._confirmingRequest) {
+            // Первое нажатие - просим подтвердить
+            this._confirmingRequest = true;
+            btn.textContent = 'Точно? Нажми еще раз';
+            btn.style.background = '#ff9800';
+            
+            // Через 3 секунды возвращаем обратно
+            this._confirmTimeout = setTimeout(() => {
+                this._confirmingRequest = false;
+                btn.textContent = 'Разметить';
+                btn.style.background = '';
+            }, 3000);
+            
+            return;
+        }
+        
+        // Второе нажатие - запускаем
+        clearTimeout(this._confirmTimeout);
+        this._confirmingRequest = false;
+        btn.style.background = '';
         
         try {
+            if (btn) { btn.disabled = true; }
+            
+            if (btn) btn.textContent = 'Отправка запроса...';
+            
             const response = await fetch('/api/tags/request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     bookName: this.bp.selectedBook,
-                    chapterName: chapter.name
+                    chapterIndex: chapter.realNumber
                 })
             });
             
-            const data = await response.json();
+            if (btn) btn.textContent = 'Получение ответа...';
+            const text = await response.text();
             
-            if (response.ok) {
-                alert('Теги успешно обработаны! Перезагрузите страницу для отображения.');
-                this.loadChapterContent(chapter);
-            } else {
-                alert(`Ошибка: ${data.error || 'Неизвестная ошибка'}`);
+            if (btn) btn.textContent = 'Парсинг результата...';
+            
+            let data = {};
+            try { 
+                data = JSON.parse(text); 
+            } catch(parseErr) { 
+                throw new Error('Невалидный JSON ответа сервера'); 
             }
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Ошибка запроса');
+            }
+            
+            if (btn) btn.textContent = 'Сохранение...';
+            
+            // Небольшая задержка для видимости статуса "Сохранение..."
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            this.showToast(`Готово! Сохранено в ${data.filePath}`);
+            
+            // Перезагружаем главу для отображения новых тегов
+            this.loadChapterContent(chapter);
         } catch (error) {
-            alert(`Ошибка запроса: ${error.message}`);
+            this.showToast(`Ошибка: ${error.message}`, true);
+        } finally {
+            if (btn) { btn.textContent = 'Разметить'; btn.disabled = false; }
         }
     }
 }

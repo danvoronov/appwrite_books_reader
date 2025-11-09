@@ -54,6 +54,7 @@ export class BookProcessor {
         document.getElementById('lhInc')?.addEventListener('click', () => this.chapterReader.changeReaderLineHeight(0.1));
         document.getElementById('lhDec')?.addEventListener('click', () => this.chapterReader.changeReaderLineHeight(-0.1));
         document.getElementById('requestTagsBtn')?.addEventListener('click', () => this.chapterReader.requestTagsForCurrentChapter());
+        document.getElementById('nextChapterBtn')?.addEventListener('click', () => this.chapterReader.loadNextChapter());
 
         // Кнопки выбора глав
         document.getElementById('selectAllBtn')?.addEventListener('click', () => this.chapterManager.selectAllChapters());

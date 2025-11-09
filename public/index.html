@@ -258,6 +258,17 @@
             border-radius: 6px;
             max-width: 60vw;
         }
+        .btn-next-chapter {
+            padding: 6px 10px;
+            font-size: 1rem;
+            line-height: 1;
+            min-width: auto;
+            margin-left: 8px;
+            background: #6c757d;
+        }
+        .btn-next-chapter:hover {
+            background: #5a6268;
+        }
         .reader-book-title-small {
             color: #888;
             font-size: 0.9rem;
@@ -333,7 +344,22 @@
 .tag-underline.type-q { background: #fffbe0; }
         .tag-comment { color: #8a6d3b; font-style: italic; margin-left: 6px; font-size: 0.9em; }
         #readerSide { position: relative; }
-.tag-right-item { position: absolute; left: 0; right: 0; font-size: 0.95em; display: flex; align-items: baseline; gap: 6px; }
+.tag-right-item { 
+    position: absolute; 
+    left: 0; 
+    right: 0; 
+    font-size: 0.95em; 
+    display: flex; 
+    align-items: baseline; 
+    gap: 6px;
+}
+
+.tag-right-item.quote { 
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin-bottom: 4px;
+}
 .tag-type-chip { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #eee; color: #333; font-size: 0.85em; white-space: nowrap; }
 .tag-type-chip.def { background: #fff1e0; }
 .tag-type-chip.ex  { background: #eef7ff; }
@@ -377,6 +403,46 @@
         
         .chapter-footer a:hover {
             text-decoration: underline;
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000;
+            animation: slideIn 0.3s ease-out;
+            max-width: 400px;
+        }
+        
+        .toast.error {
+            background: #f44336;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
         }
             font-size: 1.1rem;
             line-height: 1.8;
@@ -929,6 +995,7 @@
                         <select id="readerChapterSelect" class="reader-chapter-select">
                             <option>Загрузка...</option>
                         </select>
+                        <button id="nextChapterBtn" class="btn btn-next-chapter" title="Следующая глава">→</button>
                         <span id="readerBookTitleSmall" class="reader-book-title-small"></span>
                     </div>
                     <div class="reader-controls">

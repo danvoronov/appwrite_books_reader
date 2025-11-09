@@ -497,9 +497,9 @@ class BookProcessor {
     
     openChapterReader(chapter) {
         // Переходим к читалке в том же окне
+        this.currentChapter = chapter;  // Устанавливаем ПЕРЕД загрузкой контента
         this.showStep(3);
         this.loadChapterContent(chapter);
-        this.currentChapter = chapter;
     }
     
     async loadChapterContent(chapter) {
@@ -538,7 +538,6 @@ class BookProcessor {
         chapterSelect.onchange = () => {
             const val = parseInt(chapterSelect.value, 10);
             const target = this.bookData.chapters.find(c => c.realNumber === val);
-            this.currentChapter = target;
             if (target) {
                 this.currentChapter = target;
                 this.loadChapterContent(target);
@@ -1370,6 +1369,14 @@ class BookProcessor {
                 setStatus('Нет выбранной главы', '#c00');
                 return;
             }
+            
+            // Проверяем наличие realNumber
+            const chapterIndex = this.currentChapter.realNumber;
+            if (!chapterIndex || chapterIndex < 1) {
+                setStatus('Неверный номер главы', '#c00');
+                return;
+            }
+            
             if (btn) { btn.textContent = 'Разметка...'; btn.disabled = true; }
             setStatus('Отправка запроса...');
 
@@ -1378,7 +1385,7 @@ class BookProcessor {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     bookName: this.selectedBook,
-                    chapterIndex: this.currentChapter.realNumber
+                    chapterIndex: chapterIndex
                 })
             });
             setStatus('Получение ответа...');

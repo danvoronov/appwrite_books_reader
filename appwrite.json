@@ -1,0 +1,21 @@
+{
+  "projectId": "690f8b5b0012faa10454",
+  "projectName": "REM by Gemini",
+  "functions": [
+    {
+      "$id": "rem-backend",
+      "name": "REM Backend API",
+      "runtime": "node-18.0",
+      "execute": ["any"],
+      "events": [],
+      "schedule": "",
+      "timeout": 60,
+      "enabled": true,
+      "logging": true,
+      "entrypoint": "src/index.js",
+      "commands": "npm install",
+      "ignore": ["node_modules", ".git", "output", "epub"],
+      "path": "./functions/rem-backend"
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест интеграции с Storage</title>
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; }
+        .success { color: green; }
+        .error { color: red; }
+        .book-item { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Тест интеграции REM by Gemini с Appwrite Storage</h1>
+    
+    <div class="section">
+        <h2>📚 Тест доступа к bucket "books"</h2>
+        <button onclick="testBooksList()">Загрузить список книг</button>
+        <div id="booksResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>⚙️ Тест Backend Function</h2>
+        <button onclick="testFunction()">Тест API функции</button>
+        <div id="functionResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>🔄 Тест полной интеграции</h2>
+        <button onclick="testFullIntegration()">Тест выбора книги</button>
+        <div id="integrationResult"></div>
+    </div>
+
+    <script>
+        // Настройка Appwrite клиента
+        const client = new Appwrite.Client()
+            .setEndpoint('https://fra.cloud.appwrite.io/v1')
+            .setProject('690f8b5b0012faa10454');
+
+        const storage = new Appwrite.Storage(client);
+        const functions = new Appwrite.Functions(client);
+
+        // Тест доступа к списку книг
+        async function testBooksList() {
+            const result = document.getElementById('booksResult');
+            result.innerHTML = '⏳ Загружаем список книг...';
+            
+            try {
+                const files = await storage.listFiles('books');
+                
+                let html = `<div class="success">✅ Успешно! Найдено книг: ${files.files.length}</div>`;
+                html += '<div><h3>Список книг:</h3>';
+                
+                files.files.forEach(file => {
+                    const sizeKB = Math.round(file.sizeOriginal / 1024);
+                    html += `
+                        <div class="book-item">
+                            📖 <strong>${file.name}</strong><br>
+                            📏 Размер: ${sizeKB} KB<br>
+                            🆔 ID: ${file.$id}<br>
+                            📅 Обновлено: ${new Date(file.$updatedAt).toLocaleString()}
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                result.innerHTML = html;
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+            }
+        }
+
+        // Тест backend функции
+        async function testFunction() {
+            const result = document.getElementById('functionResult');
+            result.innerHTML = '⏳ Тестируем API функцию...';
+            
+            try {
+                const response = await functions.createExecution(
+                    'rem-backend',
+                    JSON.stringify({
+                        path: '/api/books',
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    }),
+                    false
+                );
+                
+                const data = JSON.parse(response.response);
+                
+                if (data.success) {
+                    let html = `<div class="success">✅ Function работает! Найдено книг: ${data.books.length}</div>`;
+                    html += '<div><h3>Ответ от функции:</h3>';
+                    html += `<pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                    result.innerHTML = html;
+                } else {
+                    result.innerHTML = `<div class="error">❌ Function вернула ошибку: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Ошибка вызова функции: ${error.message}</div>`;
+            }
+        }
+
+        // Тест полной интеграции
+        async function testFullIntegration() {
+            const result = document.getElementById('integrationResult');
+            result.innerHTML = '⏳ Тестируем полную интеграцию...';
+            
+            try {
+                // 1. Получаем список книг
+                const files = await storage.listFiles('books');
+                
+                if (files.files.length === 0) {
+                    result.innerHTML = '<div class="error">❌ В bucket "books" нет файлов</div>';
+                    return;
+                }
+                
+                // 2. Берем первую книгу
+                const firstBook = files.files[0];
+                
+                // 3. Запрашиваем информацию о книге через функцию
+                const response = await functions.createExecution(
+                    'rem-backend',
+                    JSON.stringify({
+                        path: '/api/book/info',
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            bookName: firstBook.name,
+                            fileId: firstBook.$id,
+                            forceEpub: false
+                        })
+                    }),
+                    false
+                );
+                
+                const data = JSON.parse(response.response);
+                
+                if (data.success) {
+                    let html = `<div class="success">✅ Полная интеграция работает!</div>`;
+                    html += `<div><h3>Тестовая книга: ${firstBook.name}</h3>`;
+                    html += `<h4>Информация о книге:</h4>`;
+                    html += `<pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                    result.innerHTML = html;
+                } else {
+                    result.innerHTML = `<div class="error">❌ Ошибка обработки книги: ${data.error}</div>`;
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Ошибка интеграции: ${error.message}</div>`;
+            }
+        }
+
+        // Автоматический тест при загрузке
+        window.addEventListener('load', () => {
+            console.log('🧪 Тестовая страница загружена');
+            console.log('📋 Доступные тесты:');
+            console.log('1. testBooksList() - тест доступа к Storage');
+            console.log('2. testFunction() - тест Backend Function');
+            console.log('3. testFullIntegration() - тест полной интеграции');
+        });
+    </script>
+</body>
+</html>

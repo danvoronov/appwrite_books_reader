@@ -1,0 +1,133 @@
+name: Deploy to Appwrite
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  APPWRITE_ENDPOINT: https://fra.cloud.appwrite.io/v1
+  APPWRITE_PROJECT_ID: 690f8b5b0012faa10454
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🏗 Checkout repository
+      uses: actions/checkout@v4
+
+    - name: 🏗 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: 📦 Install Appwrite CLI
+      run: npm install -g appwrite-cli
+
+    - name: 🔑 Login to Appwrite
+      run: |
+        echo "${{ secrets.APPWRITE_API_KEY }}" | appwrite login --method=key
+        appwrite client set-endpoint ${{ env.APPWRITE_ENDPOINT }}
+        appwrite client set-project ${{ env.APPWRITE_PROJECT_ID }}
+
+    - name: ⚙️ Create or Update Function
+      run: |
+        # Попытка создать функцию (может уже существовать)
+        appwrite functions create \
+          --function-id rem-backend \
+          --name "REM Backend API" \
+          --runtime node-18.0 \
+          --execute any \
+          --timeout 60 \
+          --enabled true \
+          --logging true || echo "Function already exists, continuing..."
+
+    - name: 🚀 Deploy Function Code
+      run: |
+        cd functions/rem-backend
+        appwrite functions create-deployment \
+          --function-id rem-backend \
+          --entrypoint "src/index.js" \
+          --code "." \
+          --activate true
+
+    - name: 🔧 Set Environment Variables
+      run: |
+        # Устанавливаем API ключ для функции
+        appwrite functions update-variable \
+          --function-id rem-backend \
+          --key APPWRITE_API_KEY \
+          --value "${{ secrets.APPWRITE_API_KEY }}" || \
+        appwrite functions create-variable \
+          --function-id rem-backend \
+          --key APPWRITE_API_KEY \
+          --value "${{ secrets.APPWRITE_API_KEY }}"
+
+    - name: 📁 Create Static Files Bucket
+      run: |
+        # Создаем bucket для статических файлов (может уже существовать)
+        appwrite storage create-bucket \
+          --bucket-id static-files \
+          --name "Static Files" \
+          --permissions 'read("any")' || echo "Bucket already exists, continuing..."
+
+    - name: 📤 Upload Static Files
+      run: |
+        cd static
+        
+        # Загружаем основные файлы
+        appwrite storage create-file \
+          --bucket-id static-files \
+          --file-id index-html \
+          --file ./index.html || \
+        appwrite storage update-file \
+          --bucket-id static-files \
+          --file-id index-html \
+          --file ./index.html
+        
+        appwrite storage create-file \
+          --bucket-id static-files \
+          --file-id styles-css \
+          --file ./styles.css || \
+        appwrite storage update-file \
+          --bucket-id static-files \
+          --file-id styles-css \
+          --file ./styles.css
+        
+        appwrite storage create-file \
+          --bucket-id static-files \
+          --file-id marked-js \
+          --file ./marked.min.js || \
+        appwrite storage update-file \
+          --bucket-id static-files \
+          --file-id marked-js \
+          --file ./marked.min.js
+        
+        # Загружаем модули
+        for module in modules/*.js; do
+          if [ -f "$module" ]; then
+            filename=$(basename "$module" .js)
+            file_id="module-${filename}-js"
+            echo "Uploading $module as $file_id"
+            
+            appwrite storage create-file \
+              --bucket-id static-files \
+              --file-id "$file_id" \
+              --file "$module" || \
+            appwrite storage update-file \
+              --bucket-id static-files \
+              --file-id "$file_id" \
+              --file "$module"
+          fi
+        done
+
+    - name: ✅ Deployment Complete
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo "📱 App URL: https://fra.cloud.appwrite.io/v1/storage/buckets/static-files/files/index-html/view?project=${{ env.APPWRITE_PROJECT_ID }}"
+        echo "⚙️ Function: rem-backend"
+        echo "📦 Buckets: books, static-files"
+        
+        # Проверяем статус функции
+        appwrite functions get --function-id rem-backend

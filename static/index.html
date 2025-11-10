@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REM by Gemini - Веб Версия</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Шаг 1: Выбор книги -->
+        <div id="step1" class="step active">
+            <div class="card">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                    <h2 style="margin:0;">📖 Выберите книгу</h2>
+                    <button class="btn btn-secondary" id="openCalendarBtn">📅 Календарь чтения</button>
+                </div>
+                <div id="booksContainer">
+                    <div class="loading">Загружаем список книг...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 2: Выбор глав -->
+        <div id="step2" class="step">
+            <div class="card">
+                <div class="chapter-header">
+                    <button class="btn btn-danger" id="backToBooks">← Назад</button>
+                    <div id="bookInfo" class="book-title-inline"></div>
+                </div>
+                <div class="chapter-controls-header">
+                    <h2>📝 Выберите главы для обработки</h2>
+                    <div class="chapter-action-buttons">
+                        <button class="btn btn-secondary" id="selectAllBtn">Выбрать все</button>
+                        <button class="btn btn-secondary" id="selectProcessedBtn">Выбрать обработанные</button>
+                        <button class="btn btn-secondary" id="deselectAllBtn">Снять</button>
+                        <button class="btn" id="processBtn" disabled>Обработать 0 глав</button>
+                    </div>
+                </div>
+                <div id="chaptersContainer">
+                    <div class="loading">Загружаем информацию о главах...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Шаг 3: Читалка -->
+        <div id="step3" class="step">
+            <div class="card">
+                <div class="reader-header-inline">
+                    <button class="btn btn-secondary" id="backToChaptersFromReader">← Назад к главам</button>
+                    <div class="reader-title-inline">
+                        <select id="readerChapterSelect" class="reader-chapter-select">
+                            <option>Загрузка...</option>
+                        </select>
+                        <button id="nextChapterBtn" class="btn btn-secondary btn-next-chapter" title="Следующая глава">→</button>
+                        <span id="readerBookTitleSmall" class="reader-book-title-small"></span>
+                    </div>
+                    <div class="reader-controls">
+                        <button id="requestTagsBtn" class="btn" style="margin-left:8px;">Разметить</button>
+<span id="requestTagsStatus" style="margin-left:8px; font-size: 0.9rem; color: #666;"></span>
+                        <div class="typo-control" title="Размер шрифта">
+                            <button class="typo-btn" id="fontDec">A−</button>
+                            <button class="typo-btn" id="fontInc">A+</button>
+                        </div>
+                        <div class="typo-control" title="Межстрочный интервал">
+                            <button class="typo-btn" id="lhDec">−</button>
+                            <button class="typo-btn" id="lhInc">＋</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="reader-summary" id="readerSummary" style="display:none;"></div>
+                <div class="reader-meta" id="readerMeta" style="display:none;"></div>
+                <div class="reader-layout">
+                    <div class="reader-main" id="readerMain">
+                        <div class="loading">⏳ Загружаем текст главы...</div>
+                    </div>
+                    <aside class="reader-side" id="readerSide"></aside>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Модальное окно обработки -->
+        <div id="processingModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>⚙️ Обработка глав</h3>
+                    <button class="modal-close" id="closeModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <!-- Прогресс-бар -->
+                    <div class="progress-bar-container" id="progressBarContainer">
+                        <div class="progress-info">
+                            <span id="progressText">Подготовка...</span>
+                            <span id="progressPercentage">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" id="progressBarFill"></div>
+                        </div>
+                        <div class="progress-details">
+                            <span id="currentChapter">-</span>
+                            <span id="chapterProgress">-</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Управление -->
+                    <div class="processing-controls" style="margin-bottom: 15px;">
+                        <button class="btn btn-danger" id="stopProcessingBtn">⏹️ Остановить</button>
+                    </div>
+                    
+                    <!-- Лог -->
+                    <div class="progress-log" id="progressLog">Ожидание начала обработки...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модульная структура приложения -->
+    <script type="module" src="modules/AppwriteClient.js"></script>
+    <script type="module">
+        // Точка входа для модульной архитектуры приложения
+        import { BookProcessor } from './modules/BookProcessor.js';
+
+        // Инициализируем приложение когда DOM загружен
+        document.addEventListener('DOMContentLoaded', () => {
+            window.bookProcessor = new BookProcessor();
+            console.log('Модульная архитектура загружена');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "rem-backend",
+  "version": "1.0.0",
+  "description": "REM by Gemini Backend API for Appwrite",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "epub2": "^3.0.2",
+    "turndown": "^7.2.0",
+    "node-appwrite": "^11.0.0"
+  }
+}

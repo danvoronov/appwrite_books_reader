@@ -3,8 +3,9 @@
 	"version": "1.0.0",
 	"main": "main.js",
 	"scripts": {
+		"extract:moonreader": "node tools/extract_moonreader_notes.js",
 		"start": "node --env-file=.env main.js",
-		"web": "node --env-file=.env server.js"
+		"web": "bun --env-file=.env server.js"
 	},
 	"dependencies": {
 		"@google/generative-ai": "^0.21.0",
@@ -14,6 +15,7 @@
 		"fastify": "^4.24.3",
 		"@fastify/static": "^6.12.0",
 		"@fastify/formbody": "^7.4.0",
-		"@fastify/websocket": "^8.3.0"
+		"@fastify/websocket": "^8.3.0",
+		"sql.js": "^1.9.0"
 	}
 }

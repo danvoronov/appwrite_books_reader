@@ -2,9 +2,16 @@ const fastify = require('fastify')({ logger: true });
 const path = require('path');
 
 // Регистрируем плагины
-fastify.register(require('@fastify/static'), {
+fastify.register(require('@fastify/static'), { // public assets
   root: path.join(__dirname, 'public'),
   prefix: '/'
+});
+
+// Отдаём экспорт Moon+ Reader напрямую, чтобы фронт мог читать /moonreader_notes.json
+fastify.register(require('@fastify/static'), {
+  root: path.join(__dirname, 'output'),
+  prefix: '/out/',
+  decorateReply: false
 });
 
 fastify.register(require('@fastify/formbody'));
@@ -12,11 +19,30 @@ fastify.register(require('@fastify/websocket'));
 
 // Импортируем наши модули
 const { getAvailableBooks, getLastSelectedBook, saveLastSelectedBook } = require('./src/bookSelector');
+const { ensureOutputDirectory, writeBookTitle, setDisplayOrder, createCombinedCardsFile } = require('./src/fileUtils');
 const { getEpubMetadata } = require('./src/openEpub');
-const { ensureOutputDirectory, writeBookTitle, createCombinedCardsFile, setDisplayOrder } = require('./src/fileUtils');
-const { formatChapterInfo, getValidChapterNumbers } = require('./src/chapterFormatter');
-const { processChapters } = require('./src/bookProcessor');
 const { checkExistingChapters, createBookFromExistingChapters } = require('./src/existingChapters');
+const { formatChapterInfo, getValidChapterNumbers } = require('./src/chapterFormatter');
+
+// WebSocket настраивается ниже в fastify.register
+
+// Получить лог обработки (возвращает объект)
+fastify.get('/api/log', async (request, reply) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const logPath = path.join(__dirname, 'output', 'REFACTORING_CHANGELOG.md');
+    if (!fs.existsSync(logPath)) {
+      return { success: true, log: 'Лог отсутствует' };
+    }
+    const content = fs.readFileSync(logPath, 'utf8');
+    return { success: true, log: content };
+  } catch (error) {
+    reply.code(500).send({ error: error.message });
+  }
+});
+
+// Удалены дублирующиеся регистрации и импорты ниже
 
 // Хранилище активных сессий
 const sessions = new Map();
@@ -419,7 +445,16 @@ fastify.get('/api/books', async (request, reply) => {
   try {
     const books = getAvailableBooks();
     const lastBook = getLastSelectedBook();
-    return { books, lastBook };
+    // augment with notes index
+    const fs = require('fs');
+    let index = [];
+    try {
+      const raw = fs.readFileSync('./output/moonreader_index.json','utf8');
+      index = JSON.parse(raw);
+    } catch(_) {}
+    const notesMap = new Map(index.map(x => [x.linkedEpub?.name || x.book, x]));
+    const booksInfo = books.map(name => ({ name, hasNotes: !!notesMap.get(name) }));
+    return { books: booksInfo, lastBook };
   } catch (error) {
     reply.code(500).send({ error: error.message });
   }
@@ -497,6 +532,11 @@ fastify.post('/api/book/info', async (request, reply) => {
           const normalizedExistingName = c.name.replace(/\s+/g, '_');
           return normalizedExistingName === normalizedChapterName;
         });
+        const path = require('path');
+        const fs = require('fs');
+        const bookDir = path.join('./output', bookName);
+        const baseName = chapter.name.replace(/[^a-zA-Z0-9]/g, '_');
+        const hasTags = fs.existsSync(path.join(bookDir, `${baseName}.tags.json`));
         return {
           realNumber: num,
           displayNumber: displayNum,
@@ -504,6 +544,7 @@ fastify.post('/api/book/info', async (request, reply) => {
           href: chapter.href || null,
           contentLength: chapter.content.length,
           exists: exists,
+          hasTags: hasTags,
           group: chapter.group || null
         };
       }).filter(ch => ch !== null), // Убираем невалидные главы

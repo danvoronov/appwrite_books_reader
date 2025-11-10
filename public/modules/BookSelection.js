@@ -39,11 +39,13 @@ export class BookSelection {
 
         let html = '<div class="book-grid">';
         
-        books.forEach(book => {
+        books.forEach(bookItem => {
+            const book = typeof bookItem === 'string' ? bookItem : bookItem.name;
+            const hasNotes = typeof bookItem === 'object' && !!bookItem.hasNotes;
             const isLast = book === lastBook;
             html += `
                 <div class="book-item ${isLast ? 'last-book' : ''}" data-book="${book}">
-                    <h3>${book}</h3>
+                    <h3>${book} ${hasNotes ? '<span style=\"font-size:0.8em; color:#2ecc71\">● notes</span>' : ''}</h3>
                     <div class="book-actions">
                         <button class="btn book-btn book-btn-load" data-book="${book}" data-force="false">Load</button>
                         <button class="btn btn-secondary book-btn book-btn-reread" data-book="${book}" data-force="true">Reread</button>

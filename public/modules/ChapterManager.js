@@ -116,13 +116,14 @@ export class ChapterManager {
     renderChapterItem(chapter) {
         const sizeInfo = Utils.formatSize(chapter.contentLength);
         const warningSymbol = chapter.contentLength > 100000 ? '⚠️ ' : '';
-        const existsEmoji = chapter.exists ? '📗 ' : '';
+        const tagsEmoji = chapter.hasTags ? '🏷️ ' : '';
+        const summaryEmoji = chapter.exists ? '📝 ' : '';
         
         return `
             <div class="chapter-item ${chapter.exists ? 'exists' : ''}" data-chapter="${chapter.realNumber}">
                 <div class="chapter-title">
                     <span class="chapter-number">[${chapter.displayNumber}]</span>
-                    <span class="chapter-exists">${existsEmoji}</span>
+                    <span class="chapter-exists">${tagsEmoji}${summaryEmoji}</span>
                     <span class="chapter-name">${chapter.name}</span>
                     <span class="chapter-size">${warningSymbol}${sizeInfo}</span>
                     <button class="chapter-process-btn" data-chapter="${chapter.realNumber}" title="Читать главу">📖</button>

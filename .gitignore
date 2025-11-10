@@ -5,6 +5,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Data from book
+*.mrpro
+mrpro_extracted
+
 # Environment variables
 .env
 .env.local

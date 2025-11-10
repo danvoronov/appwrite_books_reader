@@ -25,11 +25,11 @@ jobs:
     - name: 📦 Install Appwrite CLI
       run: npm install -g appwrite-cli
 
-    - name: 🔑 Login to Appwrite
+    - name: 🔑 Setup Appwrite CLI
       run: |
-        echo "${{ secrets.APPWRITE_API_KEY }}" | appwrite login --method=key
-        appwrite client set-endpoint ${{ env.APPWRITE_ENDPOINT }}
-        appwrite client set-project ${{ env.APPWRITE_PROJECT_ID }}
+        appwrite client --endpoint ${{ env.APPWRITE_ENDPOINT }}
+        appwrite client --project-id ${{ env.APPWRITE_PROJECT_ID }}
+        appwrite client --key "${{ secrets.APPWRITE_API_KEY }}"
 
     - name: ⚙️ Create or Update Function
       run: |
@@ -41,7 +41,7 @@ jobs:
           --execute any \
           --timeout 60 \
           --enabled true \
-          --logging true || echo "Function already exists, continuing..."
+          --logging true || echo "Function may already exist, continuing..."
 
     - name: 🚀 Deploy Function Code
       run: |
@@ -54,15 +54,11 @@ jobs:
 
     - name: 🔧 Set Environment Variables
       run: |
-        # Устанавливаем API ключ для функции
-        appwrite functions update-variable \
-          --function-id rem-backend \
-          --key APPWRITE_API_KEY \
-          --value "${{ secrets.APPWRITE_API_KEY }}" || \
-        appwrite functions create-variable \
-          --function-id rem-backend \
-          --key APPWRITE_API_KEY \
-          --value "${{ secrets.APPWRITE_API_KEY }}"
+        # Устанавливаем API ключ для функции (через веб-консоль, так как CLI может не поддерживать variables)
+        echo "⚠️ Настройте переменную APPWRITE_API_KEY в веб-консоли:"
+        echo "Functions → rem-backend → Settings → Environment Variables"
+        echo "Key: APPWRITE_API_KEY"
+        echo "Value: (ваш API ключ)"
 
     - name: 📁 Create Static Files Bucket
       run: |

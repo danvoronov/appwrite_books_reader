@@ -27,12 +27,17 @@ jobs:
 
     - name: 🔑 Setup Appwrite CLI
       run: |
+        echo "🔧 Setting up Appwrite CLI..."
         appwrite client --endpoint ${{ env.APPWRITE_ENDPOINT }}
         appwrite client --project-id ${{ env.APPWRITE_PROJECT_ID }}
         appwrite client --key "${{ secrets.APPWRITE_API_KEY }}"
+        echo "✅ Appwrite CLI configured"
+        echo "🧪 Testing connection..."
+        appwrite health get || echo "⚠️ Health check failed, but continuing..."
 
     - name: ⚙️ Create or Update Function
       run: |
+        echo "🔧 Creating function rem-backend..."
         # Попытка создать функцию (может уже существовать)
         appwrite functions create \
           --function-id rem-backend \
@@ -41,16 +46,27 @@ jobs:
           --execute any \
           --timeout 60 \
           --enabled true \
-          --logging true || echo "Function may already exist, continuing..."
+          --logging true \
+          --verbose || echo "⚠️ Function creation failed or already exists, continuing..."
+        
+        echo "📋 Checking if function exists..."
+        appwrite functions get --function-id rem-backend --verbose || echo "⚠️ Could not get function info"
 
     - name: 🚀 Deploy Function Code
       run: |
         cd functions/rem-backend
+        echo "📂 Current directory: $(pwd)"
+        echo "📋 Files in directory:"
+        ls -la
+        echo "📦 Package.json content:"
+        cat package.json
+        echo "🔧 Deploying with verbose output..."
         appwrite functions create-deployment \
           --function-id rem-backend \
           --entrypoint "src/index.js" \
           --code "." \
-          --activate true
+          --activate true \
+          --verbose
 
     - name: 🔧 Set Environment Variables
       run: |

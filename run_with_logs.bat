@@ -1,0 +1,3 @@
+@echo off
+echo Starting server with logging to logs.txt...
+bun --env-file=.env server.js > logs.txt 2>&1

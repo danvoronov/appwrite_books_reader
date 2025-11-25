@@ -49,13 +49,24 @@ const sessions = new Map();
 
 // WebSocket для real-time обновлений
 fastify.register(async function (fastify) {
-  fastify.get('/ws', { websocket: true }, (connection, req) => {
+  fastify.get('/ws', { websocket: true }, async (connection, req) => {
     const sessionId = req.query.sessionId;
     console.log('🔌 WebSocket подключение, sessionId:', sessionId);
     
     if (sessionId) {
       sessions.set(sessionId, connection);
       console.log('✅ WebSocket сессия зарегистрирована:', sessionId, '| Всего активных сессий:', sessions.size);
+      
+      // Отправляем подтверждение подключения
+      try {
+        connection.socket.send(JSON.stringify({ 
+          type: 'connected', 
+          message: 'WebSocket connection established',
+          sessionId 
+        }));
+      } catch (error) {
+        console.error('❌ Ошибка отправки подтверждения:', error);
+      }
       
       connection.socket.on('close', () => {
         sessions.delete(sessionId);
@@ -72,41 +83,6 @@ fastify.register(async function (fastify) {
 });
 
 // API Routes
-
-// Получить системную инструкцию
-fastify.get('/api/system-instruction', async (request, reply) => {
-  try {
-    const fs = require('fs');
-    const systemInstruction = fs.readFileSync('./data/systemInstruction.txt', 'utf8');
-    return { systemInstruction };
-  } catch (error) {
-    reply.code(500).send({ error: error.message });
-  }
-});
-
-// Сохранить системную инструкцию
-fastify.post('/api/system-instruction', async (request, reply) => {
-  try {
-    const { systemInstruction } = request.body;
-    
-    if (!systemInstruction) {
-      return reply.code(400).send({ error: 'System instruction is required' });
-    }
-
-    const fs = require('fs');
-    // Создаем резервную копию
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = `./data/systemInstruction_backup_${timestamp}.txt`;
-    fs.copyFileSync('./data/systemInstruction.txt', backupFile);
-    
-    // Сохраняем новую инструкцию
-    fs.writeFileSync('./data/systemInstruction.txt', systemInstruction);
-    
-    return { success: true, backupFile };
-  } catch (error) {
-    reply.code(500).send({ error: error.message });
-  }
-});
 
 // Открыть файл в Windows
 fastify.post('/api/open-file', async (request, reply) => {
@@ -600,16 +576,10 @@ fastify.post('/api/process', async (request, reply) => {
     // Загружаем книгу
     console.log('📚 Загружаем данные книги:', bookName);
     sendProgress('Загружаем данные книги...');
-    const existingResult = checkExistingChapters(bookName);
-    let book;
     
-    if (existingResult.hasExisting) {
-      console.log('📖 Используем существующие главы');
-      book = createBookFromExistingChapters(bookName, existingResult.chapters);
-    } else {
-      console.log('📖 Читаем метаданные из EPUB');
-      book = await getEpubMetadata(bookName);
-    }
+    // Всегда загружаем полный список глав из EPUB для правильной индексации
+    console.log('📖 Читаем метаданные из EPUB');
+    const book = await getEpubMetadata(bookName);
     console.log('✅ Книга загружена, глав:', book.chapters.length);
 
     writeBookTitle(bookName, book.title, book.chapters);
@@ -621,7 +591,36 @@ fastify.post('/api/process', async (request, reply) => {
     const results = [];
     for (let i = 0; i < chapters.length; i++) {
       const chapterNum = chapters[i];
+      
+      // Валидация индекса главы
+      if (!chapterNum || chapterNum < 1 || chapterNum > book.chapters.length) {
+        const errorMsg = `Некорректный номер главы: ${chapterNum}. Доступно глав: ${book.chapters.length}`;
+        console.error(`❌ ${errorMsg}`);
+        sendProgress(`❌ ${errorMsg}`);
+        results.push({ 
+          chapterNumber: chapterNum, 
+          chapterName: 'Неизвестная глава',
+          success: false,
+          error: errorMsg
+        });
+        continue;
+      }
+      
       const chapter = book.chapters[chapterNum - 1];
+      
+      // Дополнительная проверка на случай если глава undefined
+      if (!chapter || !chapter.name || !chapter.content) {
+        const errorMsg = `Глава #${chapterNum} не найдена или повреждена`;
+        console.error(`❌ ${errorMsg}`, chapter);
+        sendProgress(`❌ ${errorMsg}`);
+        results.push({ 
+          chapterNumber: chapterNum, 
+          chapterName: chapter?.name || 'Неизвестная глава',
+          success: false,
+          error: errorMsg
+        });
+        continue;
+      }
       
       console.log(`\n📖 Обработка главы ${i + 1}/${chapters.length}: #${chapterNum} "${chapter.name}"`);
       sendProgress(`Обрабатываем главу ${i + 1}/${chapters.length}: ${chapter.name}`);
@@ -689,30 +688,36 @@ fastify.post('/api/process', async (request, reply) => {
 
 // Функция для обработки одной главы с прогрессом
 async function processChapterWithProgress(book, fileName, index, wsConnection, maxRetries = 3) {
-  const { runWithProgress, reloadSystemInstruction } = require('./src/llmWeb');
+  const { runWithProgress } = require('./src/llmWeb');
   const { writeChapterOutput } = require('./src/fileUtils');
   
   console.log(`🔧 processChapterWithProgress вызвана для главы ${index}`);
   
-  // Перезагружаем системную инструкцию на случай изменений
-  reloadSystemInstruction();
-  console.log('🔄 Системная инструкция перезагружена');
-  
   if (index > 0 && index <= book.chapters.length) {
     const chapter = book.chapters[index - 1];
+    
+    // Валидация главы
+    if (!chapter || !chapter.name || !chapter.content) {
+      console.error(`❌ Глава ${index} не валидна:`, chapter);
+      return { success: false, data: null, error: 'Глава не найдена или повреждена' };
+    }
+    
     console.log(`📖 Обработка главы: "${chapter.name}", длина контента: ${chapter.content.length} символов`);
     
     const sendProgress = (data) => {
-      console.log('📤 sendProgress:', data.type, '-', data.message?.substring(0, 100));
+      // Логируем только важные сообщения (не каждый chunk)
+      if (data.type !== 'progress' || !data.message?.startsWith('Received characters')) {
+        console.log('📤 sendProgress:', data.type, '-', data.message?.substring(0, 100));
+      }
+      
       if (wsConnection) {
         try {
           wsConnection.socket.send(JSON.stringify(data));
         } catch (error) {
           console.error('❌ Ошибка отправки через WebSocket:', error);
         }
-      } else {
-        console.warn('⚠️ WebSocket не доступен в sendProgress');
       }
+      // Убрали warning - не засоряем лог
     };
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {

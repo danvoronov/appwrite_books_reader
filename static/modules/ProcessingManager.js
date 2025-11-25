@@ -110,7 +110,22 @@ export class ProcessingManager {
         if (successCount > 0) {
             this.progressTracker.addToProgressLog('');
             this.progressTracker.addToProgressLog('✨ Обновляем информацию о книге...');
-            setTimeout(() => this.bp.selectBook(), 2000);
+            setTimeout(async () => {
+                try {
+                    await this.bp.selectBook();
+                    this.progressTracker.addToProgressLog('✅ Информация о книге обновлена!');
+                    console.log('✅ Book info updated successfully');
+                    
+                    // Auto-close modal after 2 seconds
+                    setTimeout(() => {
+                        this.closeProcessingModal();
+                        console.log('✅ Modal closed');
+                    }, 2000);
+                } catch (error) {
+                    console.error('❌ Error updating book info:', error);
+                    this.progressTracker.addToProgressLog('❌ Ошибка обновления информации о книге');
+                }
+            }, 2000);
         }
     }
 

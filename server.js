@@ -51,11 +51,22 @@ const sessions = new Map();
 fastify.register(async function (fastify) {
   fastify.get('/ws', { websocket: true }, (connection, req) => {
     const sessionId = req.query.sessionId;
+    console.log('🔌 WebSocket подключение, sessionId:', sessionId);
+    
     if (sessionId) {
       sessions.set(sessionId, connection);
+      console.log('✅ WebSocket сессия зарегистрирована:', sessionId, '| Всего активных сессий:', sessions.size);
+      
       connection.socket.on('close', () => {
         sessions.delete(sessionId);
+        console.log('🔌 WebSocket сессия закрыта:', sessionId, '| Осталось активных сессий:', sessions.size);
       });
+      
+      connection.socket.on('error', (error) => {
+        console.error('❌ WebSocket ошибка для сессии', sessionId, ':', error);
+      });
+    } else {
+      console.warn('⚠️ WebSocket подключение без sessionId');
     }
   });
 });
@@ -561,34 +572,50 @@ fastify.post('/api/book/info', async (request, reply) => {
 fastify.post('/api/process', async (request, reply) => {
   try {
     const { bookName, chapters, sessionId } = request.body;
+    console.log('📥 /api/process запрос получен:', { bookName, chapters, sessionId });
     
     if (!bookName || !chapters || !Array.isArray(chapters)) {
+      console.error('❌ Некорректный запрос: отсутствуют обязательные поля');
       return reply.code(400).send({ error: 'Book name and chapters array are required' });
     }
 
     // Получаем WebSocket соединение для уведомлений
     const wsConnection = sessions.get(sessionId);
+    console.log('🔍 WebSocket соединение для sessionId', sessionId, ':', wsConnection ? 'найдено' : 'НЕ НАЙДЕНО');
     
     const sendProgress = (message) => {
+      console.log('📤 Отправка прогресса:', message);
       if (wsConnection) {
-        wsConnection.socket.send(JSON.stringify({ type: 'progress', message }));
+        try {
+          wsConnection.socket.send(JSON.stringify({ type: 'progress', message }));
+          console.log('✅ Прогресс отправлен успешно');
+        } catch (error) {
+          console.error('❌ Ошибка отправки прогресса:', error);
+        }
+      } else {
+        console.warn('⚠️ WebSocket не найден, сообщение не отправлено');
       }
     };
 
     // Загружаем книгу
+    console.log('📚 Загружаем данные книги:', bookName);
     sendProgress('Загружаем данные книги...');
     const existingResult = checkExistingChapters(bookName);
     let book;
     
     if (existingResult.hasExisting) {
+      console.log('📖 Используем существующие главы');
       book = createBookFromExistingChapters(bookName, existingResult.chapters);
     } else {
+      console.log('📖 Читаем метаданные из EPUB');
       book = await getEpubMetadata(bookName);
     }
+    console.log('✅ Книга загружена, глав:', book.chapters.length);
 
     writeBookTitle(bookName, book.title, book.chapters);
 
     // Обрабатываем главы
+    console.log('🔄 Начинаем обработку глав, количество:', chapters.length);
     sendProgress(`Начинаем обработку ${chapters.length} глав...`);
     
     const results = [];
@@ -596,10 +623,14 @@ fastify.post('/api/process', async (request, reply) => {
       const chapterNum = chapters[i];
       const chapter = book.chapters[chapterNum - 1];
       
+      console.log(`\n📖 Обработка главы ${i + 1}/${chapters.length}: #${chapterNum} "${chapter.name}"`);
       sendProgress(`Обрабатываем главу ${i + 1}/${chapters.length}: ${chapter.name}`);
       
       try {
+        const startTime = Date.now();
         const result = await processChapterWithProgress(book, bookName, chapterNum, wsConnection);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        
         results.push({ 
           chapterNumber: chapterNum, 
           chapterName: chapter.name,
@@ -608,6 +639,7 @@ fastify.post('/api/process', async (request, reply) => {
         });
         
         if (result.success) {
+          console.log(`✅ Глава "${chapter.name}" обработана успешно за ${elapsed}с`);
           sendProgress(`✅ Глава "${chapter.name}" обработана успешно`);
           // Отправляем результат для отображения в правой колонке
           if (wsConnection) {
@@ -619,9 +651,11 @@ fastify.post('/api/process', async (request, reply) => {
             }));
           }
         } else {
+          console.error(`❌ Ошибка при обработке главы "${chapter.name}"`);
           sendProgress(`❌ Ошибка при обработке главы "${chapter.name}"`);
         }
       } catch (error) {
+        console.error(`❌ Исключение при обработке главы "${chapter.name}":`, error);
         sendProgress(`❌ Ошибка при обработке главы "${chapter.name}": ${error.message}`);
         results.push({ 
           chapterNumber: chapterNum, 
@@ -633,12 +667,15 @@ fastify.post('/api/process', async (request, reply) => {
     }
 
     // Создаем объединенный файл
+    console.log('📝 Создаем объединенный файл...');
     sendProgress('Создаем объединенный файл...');
     createCombinedCardsFile(bookName);
     sendProgress('✅ Обработка завершена!');
-
+    
+    console.log('🏁 Обработка завершена, результаты:', results.map(r => ({ chapter: r.chapterNumber, success: r.success })));
     return { success: true, results };
   } catch (error) {
+    console.error('❌ Критическая ошибка в /api/process:', error);
     const wsConnection = sessions.get(request.body.sessionId);
     if (wsConnection) {
       wsConnection.socket.send(JSON.stringify({ 
@@ -655,51 +692,77 @@ async function processChapterWithProgress(book, fileName, index, wsConnection, m
   const { runWithProgress, reloadSystemInstruction } = require('./src/llmWeb');
   const { writeChapterOutput } = require('./src/fileUtils');
   
+  console.log(`🔧 processChapterWithProgress вызвана для главы ${index}`);
+  
   // Перезагружаем системную инструкцию на случай изменений
   reloadSystemInstruction();
+  console.log('🔄 Системная инструкция перезагружена');
   
   if (index > 0 && index <= book.chapters.length) {
     const chapter = book.chapters[index - 1];
+    console.log(`📖 Обработка главы: "${chapter.name}", длина контента: ${chapter.content.length} символов`);
     
     const sendProgress = (data) => {
+      console.log('📤 sendProgress:', data.type, '-', data.message?.substring(0, 100));
       if (wsConnection) {
-        wsConnection.socket.send(JSON.stringify(data));
+        try {
+          wsConnection.socket.send(JSON.stringify(data));
+        } catch (error) {
+          console.error('❌ Ошибка отправки через WebSocket:', error);
+        }
+      } else {
+        console.warn('⚠️ WebSocket не доступен в sendProgress');
       }
     };
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        console.log(`🔄 Попытка ${attempt}/${maxRetries} для главы ${index}`);
         const generatedJSON = await runWithProgress(chapter.content, sendProgress);
+        console.log(`✅ LLM вернул результат для главы ${index}, есть chapter_summary:`, !!generatedJSON?.chapter_summary);
         
         if (!generatedJSON || !generatedJSON.chapter_summary) {
+          console.warn(`⚠️ Пустой или некорректный ответ от LLM для главы ${index}`);
           if (attempt < maxRetries) {
+            console.log(`⏳ Ожидание перед повторной попыткой...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
           return { success: false, data: null };
         }
         
+        console.log(`💾 Сохраняем результат главы ${index} в файл...`);
         const success = writeChapterOutput(fileName, index, chapter.name, generatedJSON);
+        console.log(`💾 Результат сохранения главы ${index}:`, success);
         
         if (!success && attempt < maxRetries) {
+          console.log(`⏳ Ошибка сохранения, ожидание перед повторной попыткой...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
         
         if (!success) {
+          console.error(`❌ Не удалось сохранить главу ${index} после всех попыток`);
           return { success: false, data: null };
         }
 
+        console.log(`⏳ Пауза 4с между главами...`);
         await new Promise(resolve => setTimeout(resolve, 4000));
+        console.log(`✅ Глава ${index} полностью обработана`);
         return { success: true, data: generatedJSON };
       } catch (error) {
+        console.error(`❌ Ошибка при попытке ${attempt} обработки главы ${index}:`, error);
         sendProgress({ type: 'error', message: `Attempt ${attempt} failed: ${error.message}` });
         if (attempt === maxRetries) {
+          console.error(`❌ Все попытки исчерпаны для главы ${index}`);
           return { success: false, data: null };
         }
+        console.log(`⏳ Ожидание перед повторной попыткой...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
+  } else {
+    console.error(`❌ Некорректный индекс главы: ${index}, доступно глав: ${book.chapters.length}`);
   }
   return { success: false, data: null };
 }

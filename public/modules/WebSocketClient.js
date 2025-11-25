@@ -8,29 +8,31 @@ export class WebSocketClient {
 
     connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}?session=${this.sessionId}`;
+        const wsUrl = `${protocol}//${window.location.host}/ws?sessionId=${this.sessionId}`;
         
+        console.log('🔌 Подключаемся к WebSocket:', wsUrl);
         this.ws = new WebSocket(wsUrl);
         
         this.ws.onopen = () => {
-            console.log('WebSocket подключен');
+            console.log('✅ WebSocket подключен успешно');
         };
         
         this.ws.onmessage = (event) => {
             try {
+                console.log('📩 WebSocket получено сообщение:', event.data);
                 const data = JSON.parse(event.data);
                 this.onMessageCallback(data);
             } catch (error) {
-                console.error('Ошибка парсинга WebSocket сообщения:', error);
+                console.error('❌ Ошибка парсинга WebSocket сообщения:', error, 'Raw data:', event.data);
             }
         };
         
         this.ws.onerror = (error) => {
-            console.error('WebSocket ошибка:', error);
+            console.error('❌ WebSocket ошибка:', error);
         };
         
-        this.ws.onclose = () => {
-            console.log('WebSocket отключен');
+        this.ws.onclose = (event) => {
+            console.log('🔌 WebSocket отключен. Code:', event.code, 'Reason:', event.reason);
         };
     }
 

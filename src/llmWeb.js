@@ -39,62 +39,94 @@ async function runWithProgress(text, progressCallback) {
   const maxRetries = 4;
   const emptyResponse = { chapter_summary: '', chapter_cards: [] };
 
+  console.log('🤖 runWithProgress вызван, длина текста:', text.length);
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       // Choose generator based on attempt number
       const currentGenerator = attempt <= 2 ? primaryGenerator : backupGenerator;
       const currentModel = attempt <= 2 ? model : secondModel;
 
+      console.log(`🔄 Попытка ${attempt}/${maxRetries}, используем модель: ${currentModel}`);
+
       // Add delay before retries (skip first attempt)
       if (attempt > 1) {
         const delaySeconds = retryDelays[attempt - 2];
         const message = `Waiting ${delaySeconds*2} seconds before attempt ${attempt}...`;
+        console.log(`⏳ ${message}`);
         progressCallback({ type: 'progress', message });
         await delay(delaySeconds * 1000*2);
       }
 
       const message = `Sending request to model ${currentModel} (attempt ${attempt}/${maxRetries})`;
+      console.log(`📤 ${message}`);
       progressCallback({ type: 'progress', message });
 
+      console.log('🔧 Создаем chat session...');
       const chatSession = currentGenerator.startChat({
         generationConfig,
         history: [{ role: "user", parts: [{ text }] }]
       });
       
+      console.log('📡 Отправляем запрос в LLM...');
       const result = await chatSession.sendMessageStream('');
+      console.log('✅ Получен stream от LLM');
       
       let fullResponse = '';
       let characterCount = 0;
       let firstLine = '';
       let isFirstLineComplete = false;
+      let chunkCounter = 0;
 
       for await (const chunk of result.stream) {
         const chunkText = chunk.text();
+        chunkCounter++;
+        
+        if (chunkCounter === 1) {
+          console.log('📥 Получен первый chunk от LLM');
+        }
         
         // Check first line as soon as we have a complete line
         if (!isFirstLineComplete) {
           firstLine += chunkText;
           if (firstLine.includes('\n')) {
             isFirstLineComplete = true;
+            console.log('📋 Первая строка ответа:', firstLine.trim().substring(0, 50));
             if (!firstLine.trim().startsWith('```json')) {
               const message = `First line is not JSON format on attempt ${attempt}`;
+              console.warn(`⚠️ ${message}`);
               progressCallback({ type: 'progress', message });
               // Break the stream early - no need to continue reading
               break;
+            } else {
+              console.log('✅ Первая строка валидна (```json)');
             }
           }
         }
 
         fullResponse += chunkText;
         characterCount += chunkText.length;
-        const message = `Received characters: ${formatCharCount(characterCount)}`;
-        progressCallback({ type: 'progress', message });
+        
+        // Логируем каждые 50 чанков или каждые 5000 символов
+        if (chunkCounter % 50 === 0 || characterCount % 5000 < chunkText.length) {
+          const message = `Received characters: ${formatCharCount(characterCount)}`;
+          console.log(`📥 ${message} (chunk #${chunkCounter})`);
+          progressCallback({ type: 'progress', message });
+        } else {
+          // Все равно отправляем прогресс для отображения на фронте
+          const message = `Received characters: ${formatCharCount(characterCount)}`;
+          progressCallback({ type: 'progress', message });
+        }
       }
+
+      console.log(`📥 Получено всего ${chunkCounter} chunks, ${characterCount} символов`);
 
       // If we broke early due to invalid first line
       if (!firstLine.trim().startsWith('```json')) {
+        console.warn('⚠️ Первая строка не начинается с ```json, пропускаем попытку');
         if (attempt === maxRetries) {
           const message = 'All attempts exhausted - failed to get valid JSON response';
+          console.error(`❌ ${message}`);
           progressCallback({ type: 'error', message });
           return emptyResponse;
         }
@@ -102,25 +134,32 @@ async function runWithProgress(text, progressCallback) {
       }
 
       // Parse JSON from the response
+      console.log('🔍 Парсим JSON из ответа...');
       const lines = fullResponse.trim().split('\n');
       const jsonLines = lines.slice(1, -1).join('\n');
+      console.log('🔍 JSON длина:', jsonLines.length, 'символов');
       const result_data = JSON.parse(jsonLines);
+      console.log('✅ JSON успешно распарсен, ключи:', Object.keys(result_data));
       
       progressCallback({ type: 'success', message: 'Successfully processed chapter', data: result_data });
       return result_data;
 
     } catch (error) {
       const message = `Error on attempt ${attempt}: ${error.message}`;
+      console.error(`❌ ${message}`);
+      console.error('Stack trace:', error.stack);
       progressCallback({ type: 'error', message });
       
       if (attempt === maxRetries) {
         const message = 'All attempts exhausted - returning empty response';
+        console.error(`❌ ${message}`);
         progressCallback({ type: 'error', message });
         return emptyResponse;
       }
     }
   }
 
+  console.error('❌ Не удалось обработать после всех попыток');
   return emptyResponse;
 } 
 

@@ -55,13 +55,30 @@ export class ProcessingManager {
         this.processingActive = true;
         document.getElementById('stopProcessingBtn').disabled = false;
 
-        this.progressTracker.updateProgressBar(0, 'Начинаем обработку...', '', '');
+        this.progressTracker.updateProgressBar(0, 'Подготовка...', '', '');
         this.progressTracker.addToProgressLog('🚀 Запускаем обработку...');
+        console.log('🚀 Начало обработки, sessionId:', this.bp.sessionId);
         
+        this.progressTracker.addToProgressLog('🔌 Подключаем WebSocket...');
         this.connectWebSocket();
+        
+        // Даем время на подключение WebSocket
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (!this.wsClient || !this.wsClient.isConnected()) {
+            console.warn('⚠️ WebSocket не подключен, но продолжаем обработку');
+            this.progressTracker.addToProgressLog('⚠️ WebSocket не подключен, прогресс может не отображаться');
+        } else {
+            console.log('✅ WebSocket подключен успешно');
+            this.progressTracker.addToProgressLog('✅ WebSocket подключен');
+        }
 
         try {
             const chaptersArray = Array.from(this.bp.selectedChapters);
+            console.log('📤 Отправляем запрос на обработку глав:', chaptersArray);
+            
+            this.progressTracker.updateProgressBar(5, 'Отправка запроса...', '', '');
+            this.progressTracker.addToProgressLog('📤 Отправляем запрос на сервер...');
             
             const response = await fetch('/api/process', {
                 method: 'POST',
@@ -73,7 +90,9 @@ export class ProcessingManager {
                 })
             });
 
+            console.log('📥 Получен ответ от сервера, status:', response.status);
             const data = await response.json();
+            console.log('📥 Данные ответа:', data);
             
             if (!response.ok) {
                 throw new Error(data.error || 'Ошибка обработки');
@@ -82,13 +101,14 @@ export class ProcessingManager {
             this.showResults(data.results);
             
         } catch (error) {
-            console.error('Processing error:', error);
+            console.error('❌ Ошибка обработки:', error);
             this.progressTracker.addToProgressLog(`❌ Ошибка: ${error.message}`);
             this.progressTracker.updateProgressBar(0, 'Ошибка обработки', '', '');
         } finally {
             this.processingActive = false;
             document.getElementById('stopProcessingBtn').disabled = true;
             this.disconnectWebSocket();
+            console.log('🏁 Обработка завершена');
         }
     }
 
@@ -140,6 +160,7 @@ export class ProcessingManager {
     }
 
     connectWebSocket() {
+        console.log('🔌 Создаем WebSocket клиент с sessionId:', this.bp.sessionId);
         this.wsClient = new WebSocketClient(this.bp.sessionId, (data) => this.handleWebSocketMessage(data));
         this.wsClient.connect();
     }
@@ -152,27 +173,36 @@ export class ProcessingManager {
     }
 
     handleWebSocketMessage(data) {
+        console.log('📨 Обработка WebSocket сообщения:', data);
+        
         if (data.type === 'progress') {
             this.progressTracker.addToProgressLog(data.message);
             
-            if (data.message.includes('Начинаем обработку главы')) {
+            if (data.message.includes('Начинаем обработку')) {
                 this.progressTracker.setChapterProgress('start');
                 const progress = this.progressTracker.calculateProgress();
                 this.progressTracker.updateProgressBar(progress, 'Обработка главы...', data.message, '');
-            } else if (data.message.includes('Отправляем запрос')) {
+            } else if (data.message.includes('Отправка') || data.message.includes('Sending')) {
                 this.progressTracker.setChapterProgress('request');
                 const progress = this.progressTracker.calculateProgress();
-                this.progressTracker.updateProgressBar(progress, 'Отправка запроса...', '', '');
-            } else if (data.message.includes('Получено:')) {
+                this.progressTracker.updateProgressBar(progress, 'Отправка запроса в LLM...', '', '');
+            } else if (data.message.includes('Получено') || data.message.includes('Received')) {
                 this.progressTracker.updateCharacterProgress(data.message);
-            } else if (data.message.includes('Глава успешно обработана')) {
+                const progress = this.progressTracker.calculateProgress();
+                this.progressTracker.updateProgressBar(progress, 'Получение ответа...', data.message, '');
+            } else if (data.message.includes('успешно') || data.message.includes('Successfully')) {
                 this.progressTracker.setChapterProgress('complete');
                 this.progressTracker.incrementProcessedChapters();
                 const progress = this.progressTracker.calculateProgress();
                 this.progressTracker.updateProgressBar(progress, 'Глава завершена', '', '');
             }
         } else if (data.type === 'error') {
+            console.error('❌ WebSocket error message:', data.message);
             this.progressTracker.addToProgressLog(`❌ ${data.message}`);
+        } else if (data.type === 'chapter_result') {
+            console.log('✅ Получен результат главы:', data.chapterNumber, data.chapterName);
+        } else {
+            console.log('ℹ️ Неизвестный тип сообщения:', data.type);
         }
     }
 
